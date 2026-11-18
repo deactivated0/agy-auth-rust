@@ -315,7 +315,44 @@ pub fn dashboard(
     let mut status_msg = "Select account or enter command".to_string();
     let mut state = InputState::Normal;
 
+    let (bg_tx, bg_rx) = std::sync::mpsc::channel();
+    {
+        let accounts = reg.accounts.clone();
+        let store_paths = store.paths.clone();
+        std::thread::spawn(move || {
+            let bg_store = Store::new(store_paths);
+            let usage = quota::fetch_all(&bg_store, &accounts);
+            let _ = bg_tx.send(usage);
+        });
+    }
+
     loop {
+        if let Ok(usage) = bg_rx.try_recv() {
+            let cur_id = reg.accounts.get(selected).map(|a| a.id.clone());
+            let mut updated = false;
+            for a in &mut reg.accounts {
+                if let Some((_, Ok(u))) = usage.iter().find(|(uid, _)| uid == &a.id) {
+                    if !u.plan.is_empty() {
+                        a.plan = Some(u.plan.clone());
+                    }
+                    a.quota_5h = u.five_hour.as_ref().map(|b| b.remaining_percent);
+                    a.quota_weekly = u.weekly.as_ref().map(|b| b.remaining_percent);
+                    a.quota_reset_5h = u.five_hour.as_ref().and_then(|b| b.reset_time.clone());
+                    a.quota_reset_weekly = u.weekly.as_ref().and_then(|b| b.reset_time.clone());
+                    a.quota_group_desc = u.gemini_group().map(|g| g.description.clone());
+                    updated = true;
+                }
+            }
+            if updated {
+                let _ = reg.normalize();
+                let _ = store.save(reg);
+                if let Some(ref cid) = cur_id {
+                    if let Some(pos) = reg.accounts.iter().position(|a| &a.id == cid) {
+                        selected = pos;
+                    }
+                }
+            }
+        }
         if reg.accounts.is_empty() {
             bail!("no registered accounts in registry");
         }
