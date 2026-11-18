@@ -13,7 +13,7 @@ pub struct Cli {
 }
 #[derive(Copy,Clone,Debug,ValueEnum,PartialEq,Eq)]
 pub enum Target {All,Cli,Desktop}
-#[derive(Args,Debug)]struct GcpFlags {
+#[derive(Args,Clone,Debug,Default)]pub struct GcpFlags {
     #[arg(long)]gcp:bool,
     #[arg(long)]project:Option<String>,
     #[arg(long,default_value="global")]region:String,
@@ -59,6 +59,7 @@ fn print_accounts(reg:&Registry,accounts:&[Account],usage:&[(String,Result<quota
         println!("{:>2}{}  {:<45} {:<10} {:<8} {:<8}",i+1,active,short,plan,five,week);
     }
 }
+#[allow(dead_code)]
 fn choose(reg:&Registry,query:Option<&str>,mode:Mode)->Result<Option<String>> {
     if let Some(q)=query {return Ok(Some(reg.accounts[reg.index(q)?].id.clone()));}
     let picks=tui::interact(&reg.accounts,&reg.active,mode)?;
@@ -80,7 +81,7 @@ fn target_flags(t:Target,store:&Store,id:&str)->Result<(bool,bool)>{
     if t==Target::Desktop && !desktop {bail!("no Desktop profile stored for this account");}
     Ok((cli,desktop))
 }
-fn activate(store:&Store,reg:&mut Registry,id:&str,target:Target,close:bool,relaunch:bool)->Result<Vec<String>>{
+pub fn activate(store:&Store,reg:&mut Registry,id:&str,target:Target,close:bool,relaunch:bool)->Result<Vec<String>>{
     let (cli,desktop)=target_flags(target,store,id)?;
     store.switch(reg,id,cli,desktop,close,relaunch)
 }
@@ -89,7 +90,7 @@ fn is_gcp(gcp:&GcpFlags)->bool{gcp.gcp||gcp.project.is_some()}
 fn as_gcp(c:Credential,gcp:&GcpFlags)->Result<Credential>{
     if is_gcp(gcp){c.with_gcp(gcp.project.as_deref().ok_or_else(||anyhow!("--gcp requires --project"))?,&gcp.region)}else{Ok(c)}
 }
-fn import_one(store:&Store,reg:&mut Registry,path:&Path,alias:&str,gcp:&GcpFlags,key:&Path)->Result<Vec<String>>{
+pub fn import_one(store:&Store,reg:&mut Registry,path:&Path,alias:&str,gcp:&GcpFlags,key:&Path)->Result<Vec<String>>{
     let records=formats::decode(&paths::read_limit(path,4<<20)?,key)?;
     if records.len()!=1 && !alias.is_empty() {bail!("--alias is only valid for single-credential input");}
     let mut ids=Vec::with_capacity(records.len());
@@ -208,15 +209,18 @@ pub fn run()->Result<()> {
             store.switch(&mut r,&a.id,true,false,false,false)?;
             output(json!({"account":a,"active":r.active}),||println!("Signed in and activated {}.",a.display()),json_flag)?;
         }
-        CommandLine::Switch{query,live,target,close_desktop,relaunch}=>{
+        CommandLine::Switch{query,live:_,target,close_desktop,relaunch}=>{
             let _lock=store.mutation_guard()?;let mut r=store.load()?;
-            let id=choose(&r,if live {None}else{query.as_deref()},Mode::Switch)?;
-            let Some(id)=id else{return Ok(())};
-            let messages=activate(&store,&mut r,&id,target,close_desktop,relaunch)?;
-            output(json!({"active":id,"target":format!("{target:?}").to_lowercase(),"warnings":messages}),||{
-                println!("Switched to {}. Restart running agy sessions.",r.accounts.iter().find(|a|a.id==id).map(|a|a.display()).unwrap_or(id.clone()));
-                for msg in messages {eprintln!("warning: {msg}");}
-            },json_flag)?;
+            if let Some(ref q)=query {
+                let id=r.accounts[r.index(q)?].id.clone();
+                let messages=activate(&store,&mut r,&id,target,close_desktop,relaunch)?;
+                output(json!({"active":id,"target":format!("{target:?}").to_lowercase(),"warnings":messages}),||{
+                    println!("Switched to {}. Restart running agy sessions.",r.accounts.iter().find(|a|a.id==id).map(|a|a.display()).unwrap_or(id.clone()));
+                    for msg in messages {eprintln!("warning: {msg}");}
+                },json_flag)?;
+            } else {
+                tui::dashboard(&store,&mut r,target,close_desktop,relaunch)?;
+            }
         }
         CommandLine::Rotate{target,close_desktop,relaunch,force}=>{
             let _lock=store.mutation_guard()?;let mut r=store.load()?;
@@ -335,7 +339,6 @@ fn print_usage(u:&quota::Usage){
 pub fn run_switcher()->Result<()> {
     let store=Store::discover()?;let _lock=store.mutation_guard()?;let mut r=store.load()?;
     if r.accounts.is_empty(){bail!("no registered accounts");}
-    let selected=tui::interact(&r.accounts,&r.active,Mode::Switch)?;
-    if let Some(i)=selected.first(){let id=r.accounts[*i].id.clone();activate(&store,&mut r,&id,Target::All,false,false)?;println!("Switched to {id}");}
+    tui::dashboard(&store,&mut r,Target::All,false,false)?;
     Ok(())
 }
