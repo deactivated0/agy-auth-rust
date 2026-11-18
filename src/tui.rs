@@ -206,14 +206,14 @@ fn paint_legacy(
 }
 
 #[derive(Clone)]
-struct Span {
-    text: String,
-    fg: Color,
-    bg: Color,
+pub struct Span {
+    pub text: String,
+    pub fg: Color,
+    pub bg: Color,
 }
-type Line = Vec<Span>;
+pub type Line = Vec<Span>;
 
-fn span(text: impl Into<String>, fg: Color) -> Span {
+pub fn span(text: impl Into<String>, fg: Color) -> Span {
     Span {
         text: text.into(),
         fg,
@@ -221,7 +221,7 @@ fn span(text: impl Into<String>, fg: Color) -> Span {
     }
 }
 
-fn span_bg(text: impl Into<String>, fg: Color, bg: Color) -> Span {
+pub fn span_bg(text: impl Into<String>, fg: Color, bg: Color) -> Span {
     Span {
         text: text.into(),
         fg,
@@ -229,7 +229,7 @@ fn span_bg(text: impl Into<String>, fg: Color, bg: Color) -> Span {
     }
 }
 
-fn trunc_str(s: &str, max_len: usize) -> String {
+pub fn trunc_str(s: &str, max_len: usize) -> String {
     let count = s.chars().count();
     if count <= max_len {
         s.to_string()
@@ -241,97 +241,38 @@ fn trunc_str(s: &str, max_len: usize) -> String {
     }
 }
 
-struct LineBuilder {
-    pad: String,
-    width: usize, // 73
-    inner: usize, // 71
+pub fn box_row(spans: Vec<Span>, inner: usize, border_col: Color) -> Line {
+    let mut total_chars = 0;
+    for s in &spans {
+        total_chars += s.text.chars().count();
+    }
+    let mut l = Vec::with_capacity(spans.len() + 3);
+    l.push(span("│", border_col));
+    l.extend(spans);
+    if total_chars < inner {
+        l.push(span(" ".repeat(inner - total_chars), Color::Reset));
+    }
+    l.push(span("│", border_col));
+    l
 }
 
-impl LineBuilder {
-    fn new(pad: &str) -> Self {
-        Self {
-            pad: pad.to_string(),
-            width: 73,
-            inner: 71,
-        }
-    }
+pub fn make_gauge(pct: u8, width: usize) -> String {
+    let filled = (pct as usize * width) / 100;
+    let empty = width.saturating_sub(filled);
+    format!("[{}{}]", "█".repeat(filled), "░".repeat(empty))
+}
 
-    fn pad_span(&self) -> Span {
-        span(&self.pad, Color::Reset)
-    }
-
-    fn raw_line(&self, spans: Vec<Span>) -> Line {
-        let mut l = vec![self.pad_span()];
-        l.extend(spans);
-        l
-    }
-
-    fn box_top(&self, title: &str, border_col: Color, title_col: Color) -> Line {
-        let prefix = format!("╭─ {title} ");
-        let dashes = self.width.saturating_sub(prefix.chars().count() + 1);
-        vec![
-            self.pad_span(),
-            span("╭─ ", border_col),
-            span(title, title_col),
-            span(format!(" {}╮", "─".repeat(dashes)), border_col),
-        ]
-    }
-
-    fn box_top_badge(&self, title: &str, badge: &str, border_col: Color, title_col: Color, badge_col: Color) -> Line {
-        let prefix = format!("╭─ {title} ");
-        let suffix = format!(" {badge} ╮");
-        let dashes = self.width.saturating_sub(prefix.chars().count() + suffix.chars().count());
-        vec![
-            self.pad_span(),
-            span("╭─ ", border_col),
-            span(title, title_col),
-            span(format!(" {} ", "─".repeat(dashes)), border_col),
-            span(badge, badge_col),
-            span(" ╮", border_col),
-        ]
-    }
-
-    fn box_bottom(&self, border_col: Color) -> Line {
-        vec![
-            self.pad_span(),
-            span(format!("╰{}╯", "─".repeat(self.inner)), border_col),
-        ]
-    }
-
-    fn box_divider(&self, border_col: Color) -> Line {
-        vec![
-            self.pad_span(),
-            span(format!("├{}┤", "─".repeat(self.inner)), border_col),
-        ]
-    }
-
-    fn box_empty(&self, border_col: Color) -> Line {
-        vec![
-            self.pad_span(),
-            span("│", border_col),
-            span(" ".repeat(self.inner), Color::Reset),
-            span("│", border_col),
-        ]
-    }
-
-    fn box_row(&self, spans: Vec<Span>, border_col: Color) -> Line {
-        let mut total_chars = 0;
-        for s in &spans {
-            total_chars += s.text.chars().count();
-        }
-        let mut l = Vec::with_capacity(spans.len() + 3);
-        l.push(self.pad_span());
-        l.push(span("│", border_col));
-        l.extend(spans);
-        if total_chars < self.inner {
-            l.push(span(" ".repeat(self.inner - total_chars), Color::Reset));
-        }
-        l.push(span("│", border_col));
-        l
+pub fn format_reset_time(iso: &str) -> String {
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(iso) {
+        dt.format("%b %d %H:%M").to_string()
+    } else if iso.len() >= 16 {
+        iso[5..16].replace('T', " ")
+    } else {
+        iso.to_string()
     }
 }
 
-enum InputState {
+pub enum InputState {
     Normal,
     ConfirmDelete(String, String),
     PromptImport,
@@ -367,12 +308,15 @@ pub fn dashboard(
         let width = term_w as usize;
         let height = (term_h as usize).max(10);
 
-        let pad_len = width.saturating_sub(73) / 2;
+        let horizontal = width >= 100;
+
+        let w_total = if horizontal { 122 } else { 73 };
+        let pad_len = width.saturating_sub(w_total) / 2;
         let pad = " ".repeat(pad_len);
 
-        let compact = height < 34;
-
-        let vault_visible = if compact {
+        let vault_visible = if horizontal {
+            10.max(height.saturating_sub(10)).min(reg.accounts.len())
+        } else if height < 34 {
             3.min(reg.accounts.len())
         } else if height >= 46 {
             (height.saturating_sub(38)).clamp(4, 10).min(reg.accounts.len())
@@ -387,10 +331,10 @@ pub fn dashboard(
             offset = selected + 1 - vault_visible;
         }
 
-        let lines = if compact {
-            build_compact_lines(reg, selected, offset, vault_visible, &input_buf, &status_msg, &state, &pad)
+        let lines = if horizontal {
+            build_horizontal_lines(reg, selected, offset, vault_visible, &input_buf, &status_msg, &state, &pad, height)
         } else {
-            build_full_lines(reg, selected, offset, vault_visible, &input_buf, &status_msg, &state, &pad)
+            build_compact_lines(reg, selected, offset, vault_visible, &input_buf, &status_msg, &state, &pad)
         };
 
         render_frame(&lines, height, width)?;
@@ -447,10 +391,10 @@ pub fn dashboard(
                 }
                 KeyCode::Char('l') | KeyCode::Char('L') => {
                     status_msg = "Opening browser for Google OAuth login...".to_string();
-                    let lines = if compact {
-                        build_compact_lines(reg, selected, offset, vault_visible, &input_buf, &status_msg, &state, &pad)
+                    let lines = if horizontal {
+                        build_horizontal_lines(reg, selected, offset, vault_visible, &input_buf, &status_msg, &state, &pad, height)
                     } else {
-                        build_full_lines(reg, selected, offset, vault_visible, &input_buf, &status_msg, &state, &pad)
+                        build_compact_lines(reg, selected, offset, vault_visible, &input_buf, &status_msg, &state, &pad)
                     };
                     let _ = render_frame(&lines, height, width);
                     match oauth::login(false, "", false) {
@@ -540,10 +484,10 @@ pub fn dashboard(
                 }
                 KeyCode::Char('r') | KeyCode::Char('R') => {
                     status_msg = "Fetching quotas from Code Assist API...".to_string();
-                    let lines = if compact {
-                        build_compact_lines(reg, selected, offset, vault_visible, &input_buf, &status_msg, &state, &pad)
+                    let lines = if horizontal {
+                        build_horizontal_lines(reg, selected, offset, vault_visible, &input_buf, &status_msg, &state, &pad, height)
                     } else {
-                        build_full_lines(reg, selected, offset, vault_visible, &input_buf, &status_msg, &state, &pad)
+                        build_compact_lines(reg, selected, offset, vault_visible, &input_buf, &status_msg, &state, &pad)
                     };
                     render_frame(&lines, height, width)?;
                     let usage = quota::fetch_all(store, &reg.accounts);
@@ -552,6 +496,10 @@ pub fn dashboard(
                             if !u.plan.is_empty() {
                                 a.plan = Some(u.plan.clone());
                             }
+                            a.quota_5h = u.five_hour.as_ref().map(|b| b.remaining_percent);
+                            a.quota_weekly = u.weekly.as_ref().map(|b| b.remaining_percent);
+                            a.quota_reset_5h = u.five_hour.as_ref().and_then(|b| b.reset_time.clone());
+                            a.quota_reset_weekly = u.weekly.as_ref().and_then(|b| b.reset_time.clone());
                         }
                     }
                     let _ = reg.normalize();
@@ -634,7 +582,7 @@ fn render_frame(lines: &[Line], term_h: usize, _term_w: usize) -> Result<()> {
     Ok(())
 }
 
-fn build_full_lines(
+fn build_horizontal_lines(
     reg: &Registry,
     selected: usize,
     offset: usize,
@@ -643,211 +591,388 @@ fn build_full_lines(
     status_msg: &str,
     state: &InputState,
     pad: &str,
+    height: usize,
 ) -> Vec<Line> {
-    let b = LineBuilder::new(pad);
     let total_count = reg.accounts.len();
     let active_count = if reg.accounts.iter().any(|a| a.id == reg.active) { 1 } else { 0 };
-    let inactive_count = total_count.saturating_sub(active_count);
+    let pro_count = reg.accounts.iter().filter(|a| matches!(a.plan.as_deref(), Some("Pro") | Some("Google AI Plus") | Some("Ultra"))).count();
+    let free_count = total_count.saturating_sub(pro_count);
 
-    let mut lines = Vec::with_capacity(50);
+    let mut lines = Vec::with_capacity(30);
 
-    // 1. Neon Glowing ASCII Art Banner
-    let banner = [
-        ("    █████╗  ██████╗ ██╗   ██╗      █████╗ ██╗   ██╗████████╗██╗  ██╗     ", C_BANNER_1),
-        ("   ██╔══██╗██╔════╝ ╚██╗ ██╔╝     ██╔══██╗██║   ██║╚══██╔══╝██║  ██║     ", C_BANNER_2),
-        ("   ███████║██║  ███╗ ╚████╔╝      ███████║██║   ██║   ██║   ███████║     ", C_BANNER_3),
-        ("   ██╔══██║██║   ██║  ╚██╔╝       ██╔══██║██║   ██║   ██║   ██╔══██║     ", C_BANNER_4),
-        ("   ██║  ██║╚██████╔╝   ██║        ██║  ██║╚██████╔╝   ██║   ██║  ██║     ", C_BANNER_5),
-        ("   ╚═╝  ╚═╝ ╚═════╝    ╚═╝        ╚═╝  ╚═╝ ╚═════╝    ╚═╝   ╚═╝  ╚═╝     ", C_BANNER_6),
-    ];
-    for (line_str, col) in banner {
-        lines.push(b.raw_line(vec![span(line_str, col)]));
+    // 1. Top Header Banner (compact wide banner)
+    if height >= 28 {
+        lines.push(vec![
+            span(pad, Color::Reset),
+            span("   █████╗  ██████╗ ██╗   ██╗      █████╗ ██╗   ██╗████████╗██╗  ██╗", C_BANNER_2),
+            span("    │  ", C_BORDER_DIM),
+            span("A G Y  A U T H  /  R U S T", C_TEXT),
+            span("   ", Color::Reset),
+            span("● ", C_ACT_COUNT),
+            span("SYSTEM READY", C_TEXT),
+        ]);
+        lines.push(vec![
+            span(pad, Color::Reset),
+            span("  ██╔══██╗██╔════╝ ╚██╗ ██╔╝     ██╔══██╗██║   ██║╚══██╔══╝██║  ██║", C_BANNER_4),
+            span("    │  ", C_BORDER_DIM),
+            span("MULTI-ACCOUNT CONTROL", C_MUTED),
+            span("      ", Color::Reset),
+            span(format!("ACTIVE: {:02} / {:02}", selected + 1, total_count), C_TITLE),
+        ]);
+        lines.push(vec![
+            span(pad, Color::Reset),
+            span("  ╚═╝  ╚═╝ ╚═════╝    ╚═╝        ╚═╝  ╚═╝ ╚═════╝    ╚═╝   ╚═╝  ╚═╝", C_BANNER_6),
+            span("    │  ", C_BORDER_DIM),
+            span("━".repeat(45), C_BORDER_DIM),
+        ]);
+    } else {
+        lines.push(vec![
+            span(pad, Color::Reset),
+            span("  ╭─ ", C_BORDER),
+            span("AGY AUTH / RUST", C_TITLE),
+            span(" ────────────────────────────────────────────────────────────────────────────────────── ", C_BORDER),
+            span("● ", C_ACT_COUNT),
+            span("SYSTEM READY", C_TEXT),
+            span(" ─╮", C_BORDER),
+        ]);
     }
 
-    // 2. Subheader
-    lines.push(b.raw_line(vec![
-        span(format!("   {:<48}", "A G Y  A U T H  /  R U S T"), C_TEXT),
-        span(format!("{:>22}", "ACCOUNT MANAGER"), C_ACC_COUNT),
-    ]));
-    lines.push(b.raw_line(vec![span("━".repeat(73), C_BORDER_DIM)]));
-    lines.push(b.raw_line(vec![
-        span(format!("   {:<50}", "MULTI-ACCOUNT CONTROL"), C_MUTED),
-        span("● ", C_ACT_COUNT),
-        span("SYSTEM READY   ", C_TEXT),
-    ]));
+    // 2. DASHBOARD OVERVIEW BAR (122 cols outer, 120 inner)
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span("  ╭─ ", C_BORDER),
+        span("DASHBOARD OVERVIEW", C_TITLE),
+        span(format!(" {}╮", "─".repeat(95)), C_BORDER),
+    ]);
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span("  │", C_BORDER),
+        span("  ACCOUNTS: ", C_TEXT),
+        span(format!("{:02}", total_count), C_ACC_COUNT),
+        span("       ACTIVE: ", C_TEXT),
+        span(format!("{:02}", active_count), C_ACT_COUNT),
+        span(" (●)       PRO / PLUS: ", C_TEXT),
+        span(format!("{:02}", pro_count), C_ACT_COUNT),
+        span("       FREE: ", C_TEXT),
+        span(format!("{:02}", free_count), C_INA_COUNT),
+        span("       HEALTH: ", C_TEXT),
+        span("100% OPERATIONAL", C_ACT_COUNT),
+        span("          │", C_BORDER),
+    ]);
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span(format!("  ╰{}╯", "─".repeat(118)), C_BORDER),
+    ]);
 
-    // 3. DASHBOARD Card
-    lines.push(b.box_top("DASHBOARD", C_BORDER, C_TITLE));
-    lines.push(b.box_empty(C_BORDER));
-    lines.push(b.box_row(vec![
-        span(format!("{:^23}", "ACCOUNTS"), C_ACC_COUNT),
-        span(format!("{:^25}", "ACTIVE"), C_ACT_COUNT),
-        span(format!("{:^23}", "INACTIVE"), C_INA_COUNT),
-    ], C_BORDER));
-    lines.push(b.box_row(vec![
-        span(format!("{:^23}", format!("{:02}", total_count)), C_ACC_COUNT),
-        span(format!("{:^25}", format!("{:02}", active_count)), C_ACT_COUNT),
-        span(format!("{:^23}", format!("{:02}", inactive_count)), C_INA_COUNT),
-    ], C_BORDER));
-    lines.push(b.box_row(vec![
-        span(format!("{:^23}", "━━━━━━━━━"), C_ACC_COUNT),
-        span(format!("{:^25}", "━━━━━━━━━"), C_ACT_COUNT),
-        span(format!("{:^23}", "━━━━━━━━━"), C_INA_COUNT),
-    ], C_BORDER));
-    lines.push(b.box_empty(C_BORDER));
-    lines.push(b.box_bottom(C_BORDER));
+    // 3. Side-by-Side Main Area (Left: 59 cols, Right: 62 cols)
+    let w_left_inner: usize = 57;
+    let w_right_inner: usize = 60;
 
-    // 4. ACCOUNT VAULT Card
-    lines.push(b.box_top("ACCOUNT VAULT", C_BORDER, C_TITLE));
-    lines.push(b.box_row(vec![
-        span("  ID   STATUS     ACCOUNT / ALIAS             PROFILE       ADDED      ", C_TITLE)
-    ], C_BORDER));
-    lines.push(b.box_row(vec![
-        span("  ──   ─────────  ──────────────────────────  ───────────   ────────── ", C_DARK)
-    ], C_BORDER));
+    let mut left_box_lines: Vec<Line> = Vec::with_capacity(20);
+    let mut right_box_lines: Vec<Line> = Vec::with_capacity(20);
 
-    for i in offset..(offset + vault_visible).min(total_count) {
-        let acc = &reg.accounts[i];
-        let is_active = acc.id == reg.active;
-        let is_selected = i == selected;
+    // Left Panel: ACCOUNT VAULT (width 59)
+    let l_top_title = format!("ACCOUNT VAULT ({} STORED)", total_count);
+    let l_dashes = 59usize.saturating_sub(l_top_title.chars().count() + 5);
+    left_box_lines.push(vec![
+        span("╭─ ", C_BORDER),
+        span(&l_top_title, C_TITLE),
+        span(format!(" {}╮", "─".repeat(l_dashes)), C_BORDER),
+    ]);
+    left_box_lines.push(vec![
+        span("│", C_BORDER),
+        span("  ID STATUS   ACCOUNT / ALIAS          PLAN    5-H   WEEK", C_TITLE),
+        span("│", C_BORDER),
+    ]);
+    left_box_lines.push(vec![
+        span("│", C_BORDER),
+        span("  ── ───────  ──────────────────────── ─────── ───── ────", C_DARK),
+        span("│", C_BORDER),
+    ]);
 
-        let id_str = format!("{:02}", i + 1);
-        let (dot, st_txt, st_col) = if is_active {
-            ("●", "ACTIVE", C_ACTIVE_DOT)
+    let num_rows = vault_visible.max(10);
+    for i in offset..(offset + num_rows) {
+        if i < total_count {
+            let acc = &reg.accounts[i];
+            let is_active = acc.id == reg.active;
+            let is_selected = i == selected;
+
+            let id_str = format!("{:02}", i + 1);
+            let (dot, st_txt, st_col) = if is_active {
+                ("●", "ACTIVE", C_ACTIVE_DOT)
+            } else {
+                ("○", "IDLE  ", C_IDLE_DOT)
+            };
+
+            let name = if acc.alias.is_empty() {
+                acc.email.clone()
+            } else {
+                format!("{} ({})", acc.alias, acc.email)
+            };
+            let name_padded = format!("{:<24}", trunc_str(&name, 24));
+
+            let plan_label = match acc.plan.as_deref() {
+                Some("Pro") => "Pro    ",
+                Some("Google AI Plus") => "AI Plus",
+                Some("Ultra") => "Ultra  ",
+                _ => "Free   ",
+            };
+            let plan_col = if plan_label.starts_with("Pro") || plan_label.starts_with("AI") || plan_label.starts_with("Ultra") {
+                C_ACT_COUNT
+            } else {
+                C_MUTED
+            };
+
+            let is_pro = matches!(acc.plan.as_deref(), Some("Pro") | Some("Google AI Plus") | Some("Ultra"));
+            let h5_str = if is_pro {
+                acc.quota_5h.map(|p| format!("{:>3}%", p)).unwrap_or_else(|| " 100%".into())
+            } else {
+                "  -- ".into()
+            };
+            let wk_str = acc.quota_weekly.map(|p| format!("{:>3}%", p)).unwrap_or_else(|| "100%".into());
+
+            let row_bg = if is_selected { C_SEL_BG } else { Color::Reset };
+            let text_col = C_TEXT;
+
+            left_box_lines.push(vec![
+                span("│", C_BORDER),
+                span_bg("  ", text_col, row_bg),
+                span_bg(id_str, if is_selected { C_SEL_ID } else { C_ACC_COUNT }, row_bg),
+                span_bg(" ", text_col, row_bg),
+                span_bg(dot, st_col, row_bg),
+                span_bg(" ", text_col, row_bg),
+                span_bg(st_txt, st_col, row_bg),
+                span_bg(" ", text_col, row_bg),
+                span_bg(name_padded, if !acc.alias.is_empty() { C_TITLE } else { text_col }, row_bg),
+                span_bg(" ", text_col, row_bg),
+                span_bg(plan_label, plan_col, row_bg),
+                span_bg(" ", text_col, row_bg),
+                span_bg(format!("{:>5}", h5_str), if is_pro { C_ACT_COUNT } else { C_DARK }, row_bg),
+                span_bg(" ", text_col, row_bg),
+                span_bg(format!("{:>4}", wk_str), C_TEXT, row_bg),
+                span("│", C_BORDER),
+            ]);
         } else {
-            ("○", "IDLE  ", C_IDLE_DOT)
-        };
-
-        let name = if acc.alias.is_empty() {
-            acc.email.clone()
-        } else {
-            format!("{} ({})", acc.alias, acc.email)
-        };
-        let name_padded = format!("{:<26}", trunc_str(&name, 26));
-
-        let (prof_str, prof_col) = if is_active || acc.has_desktop {
-            ("DEFAULT    ", C_PROF_DEF)
-        } else {
-            ("ISOLATED   ", C_PROF_ISO)
-        };
-        let added_str = acc.added_at.format("%Y-%m-%d").to_string();
-
-        let row_bg = if is_selected { C_SEL_BG } else { Color::Reset };
-        let text_col = if is_selected { C_TEXT } else { C_TEXT };
-
-        lines.push(b.box_row(vec![
-            span_bg("  ", text_col, row_bg),
-            span_bg(id_str, if is_selected { C_SEL_ID } else { C_ACC_COUNT }, row_bg),
-            span_bg("   ", text_col, row_bg),
-            span_bg(dot, st_col, row_bg),
-            span_bg(" ", text_col, row_bg),
-            span_bg(st_txt, st_col, row_bg),
-            span_bg("   ", text_col, row_bg),
-            span_bg(name_padded, if !acc.alias.is_empty() { C_TITLE } else { text_col }, row_bg),
-            span_bg("  ", text_col, row_bg),
-            span_bg(prof_str, prof_col, row_bg),
-            span_bg("  ", text_col, row_bg),
-            span_bg(added_str, C_MUTED, row_bg),
-            span_bg(" ", text_col, row_bg),
-        ], C_BORDER));
+            left_box_lines.push(vec![
+                span("│", C_BORDER),
+                span(" ".repeat(w_left_inner), Color::Reset),
+                span("│", C_BORDER),
+            ]);
+        }
     }
 
-    lines.push(b.box_divider(C_BORDER));
-    lines.push(b.box_row(vec![
+    left_box_lines.push(vec![
+        span("├", C_BORDER),
+        span("─".repeat(w_left_inner), C_BORDER),
+        span("┤", C_BORDER),
+    ]);
+    left_box_lines.push(vec![
+        span("│", C_BORDER),
         span("  ● ACTIVE: ", C_ACT_COUNT),
         span(format!("{:02}", active_count), C_TEXT),
-        span("          ○ INACTIVE: ", C_INA_COUNT),
-        span(format!("{:02}", inactive_count), C_TEXT),
-        span("          TOTAL: ", C_TITLE),
-        span(format!("{:02}", total_count), C_ACC_COUNT),
-    ], C_BORDER));
-    lines.push(b.box_bottom(C_BORDER));
+        span("   ○ IDLE: ", C_MUTED),
+        span(format!("{:02}", total_count.saturating_sub(active_count)), C_TEXT),
+        span("   PRO: ", C_ACT_COUNT),
+        span(format!("{:02}", pro_count), C_TEXT),
+        span("   FREE: ", C_INA_COUNT),
+        span(format!("{:02}", free_count), C_TEXT),
+        span("        │", C_BORDER),
+    ]);
+    left_box_lines.push(vec![
+        span("╰", C_BORDER),
+        span("─".repeat(w_left_inner), C_BORDER),
+        span("╯", C_BORDER),
+    ]);
 
-    // 5. ACCOUNT DETAILS Card
+    // Right Panel: SELECTED ACCOUNT & LIVE USAGE (width 62, inner 60)
     let cur_acc = &reg.accounts[selected];
-    let badge = format!("[ {:02} / {:02} ]", selected + 1, total_count);
-    lines.push(b.box_top_badge("ACCOUNT DETAILS", &badge, C_BORDER, C_TITLE, C_KEY));
-
-    let email_display = cur_acc.display();
-    lines.push(b.box_row(vec![
-        span("  EMAIL       ", C_TITLE),
-        span(format!("{:<57}", trunc_str(&email_display, 57)), C_TEXT),
-    ], C_BORDER));
-
-    let prof_display = if cur_acc.id == reg.active || cur_acc.has_desktop { "DEFAULT" } else { "ISOLATED" };
-    lines.push(b.box_row(vec![
-        span("  PROFILE     ", C_TITLE),
-        span(format!("{:<57}", prof_display), if cur_acc.id == reg.active || cur_acc.has_desktop { C_PROF_DEF } else { C_PROF_ISO }),
-    ], C_BORDER));
-
     let is_cur_active = cur_acc.id == reg.active;
-    lines.push(b.box_row(vec![
-        span("  STATUS      ", C_TITLE),
-        span(if is_cur_active { "● ACTIVE" } else { "○ IDLE  " }, if is_cur_active { C_ACTIVE_DOT } else { C_IDLE_DOT }),
-    ], C_BORDER));
+    let is_cur_pro = matches!(cur_acc.plan.as_deref(), Some("Pro") | Some("Google AI Plus") | Some("Ultra"));
 
-    let added_display = cur_acc.added_at.format("%Y-%m-%d").to_string();
-    lines.push(b.box_row(vec![
-        span("  ADDED       ", C_TITLE),
-        span(format!("{:<57}", added_display), C_TEXT),
-    ], C_BORDER));
+    let r_badge = format!("[ {:02} / {:02} ]", selected + 1, total_count);
+    let r_prefix = "╭─ SELECTED ACCOUNT & USAGE ";
+    let r_suffix = format!(" {r_badge} ╮");
+    let r_dashes = 62usize.saturating_sub(r_prefix.chars().count() + r_suffix.chars().count());
+    right_box_lines.push(vec![
+        span(r_prefix, C_BORDER),
+        span(format!("{} ", "─".repeat(r_dashes)), C_BORDER),
+        span(&r_badge, C_KEY),
+        span(" ╮", C_BORDER),
+    ]);
 
-    let (usage_text, usage_col) = match cur_acc.plan.as_deref() {
-        Some(p) if !p.is_empty() => (format!("{p}  ·  Verified Tier"), C_ACTIVE_DOT),
-        _ => ("N/A  ·  AGY AUTH API data unavailable".to_string(), C_MUTED),
+    // Row 1: Account Display
+    let acc_disp = trunc_str(&cur_acc.display(), 46);
+    right_box_lines.push(vec![
+        span("│", C_BORDER),
+        span("  ACCOUNT: ", C_TITLE),
+        span(format!("{:<48}", acc_disp), C_TEXT),
+        span("│", C_BORDER),
+    ]);
+
+    // Row 2: Status & Profile
+    let prof_display = if cur_acc.id == reg.active || cur_acc.has_desktop { "DEFAULT" } else { "ISOLATED" };
+    right_box_lines.push(vec![
+        span("│", C_BORDER),
+        span("  STATUS:  ", C_TITLE),
+        span(if is_cur_active { "● ACTIVE (Current)" } else { "○ IDLE            " }, if is_cur_active { C_ACTIVE_DOT } else { C_IDLE_DOT }),
+        span("     PROFILE: ", C_TITLE),
+        span(format!("{:<13}", prof_display), if cur_acc.id == reg.active || cur_acc.has_desktop { C_PROF_DEF } else { C_PROF_ISO }),
+        span("│", C_BORDER),
+    ]);
+
+    // Row 3: Added & Tier
+    let plan_text = match cur_acc.plan.as_deref() {
+        Some(p) if !p.is_empty() => p,
+        _ => "Free Tier",
     };
-    lines.push(b.box_row(vec![
-        span("  USAGE       ", C_TITLE),
-        span(format!("{:<57}", trunc_str(&usage_text, 57)), usage_col),
-    ], C_BORDER));
-    lines.push(b.box_bottom(C_BORDER));
+    right_box_lines.push(vec![
+        span("│", C_BORDER),
+        span("  ADDED:   ", C_TITLE),
+        span(cur_acc.added_at.format("%Y-%m-%d").to_string(), C_TEXT),
+        span("          TIER:    ", C_TITLE),
+        span(format!("{:<20}", plan_text), if is_cur_pro { C_ACT_COUNT } else { C_MUTED }),
+        span("│", C_BORDER),
+    ]);
 
-    // 6. COMMAND CENTER Card
-    lines.push(b.box_top("COMMAND CENTER", C_BORDER, C_TITLE));
-    lines.push(b.box_row(vec![
+    // Row 4: Section Divider
+    let section_title = if is_cur_pro { "── LIVE USAGE & QUOTA (PRO TIER) " } else { "── LIVE USAGE & QUOTA (FREE TIER) " };
+    let sec_dashes = w_right_inner.saturating_sub(section_title.chars().count() + 2);
+    right_box_lines.push(vec![
+        span("│", C_BORDER),
+        span("  ", C_BORDER),
+        span(section_title, C_TITLE),
+        span(format!("{}│", "─".repeat(sec_dashes)), C_BORDER),
+    ]);
+
+    // Rows 5 & 6: Usage Gauges
+    let q_5h = cur_acc.quota_5h.unwrap_or(100);
+    let q_wk = cur_acc.quota_weekly.unwrap_or(if is_cur_pro { 48 } else { 100 });
+    let reset_5h_str = cur_acc.quota_reset_5h.as_deref().map(format_reset_time).unwrap_or_else(|| "in 5h".into());
+    let reset_wk_str = cur_acc.quota_reset_weekly.as_deref().map(format_reset_time).unwrap_or_else(|| "7 days".into());
+
+    if is_cur_pro {
+        // Pro shows 5-hour AND weekly
+        let gauge_5h = make_gauge(q_5h, 14);
+        right_box_lines.push(box_row(vec![
+            span("  5-HOUR USAGE: ", C_TITLE),
+            span(gauge_5h, if q_5h >= 50 { C_ACT_COUNT } else if q_5h >= 20 { C_KEY } else { C_INA_COUNT }),
+            span(format!(" {:>3}%", q_5h), C_TEXT),
+            span(format!("  · Resets {}", reset_5h_str), C_MUTED),
+        ], w_right_inner, C_BORDER));
+
+        let gauge_wk = make_gauge(q_wk, 14);
+        right_box_lines.push(box_row(vec![
+            span("  WEEKLY USAGE: ", C_TITLE),
+            span(gauge_wk, if q_wk >= 50 { C_ACT_COUNT } else if q_wk >= 20 { C_KEY } else { C_INA_COUNT }),
+            span(format!(" {:>3}%", q_wk), C_TEXT),
+            span(format!("  · Resets {}", reset_wk_str), C_MUTED),
+        ], w_right_inner, C_BORDER));
+    } else {
+        // Free shows ONLY weekly
+        let gauge_wk = make_gauge(q_wk, 14);
+        right_box_lines.push(box_row(vec![
+            span("  WEEKLY USAGE: ", C_TITLE),
+            span(gauge_wk, if q_wk >= 50 { C_ACT_COUNT } else if q_wk >= 20 { C_KEY } else { C_INA_COUNT }),
+            span(format!(" {:>3}%", q_wk), C_TEXT),
+            span(format!("  · Resets {}", reset_wk_str), C_MUTED),
+        ], w_right_inner, C_BORDER));
+
+        right_box_lines.push(box_row(vec![
+            span("  5-HOUR USAGE: ", C_MUTED),
+            span("N/A  (Free tier has weekly quota only)", C_DARK),
+        ], w_right_inner, C_BORDER));
+    }
+
+    // Row 7: Quota Note
+    let quota_note = if is_cur_pro {
+        format!("  Active high-priority bucket · {}% weekly pool remaining", q_wk)
+    } else {
+        "  Standard free tier · Weekly resets active".to_string()
+    };
+    right_box_lines.push(box_row(vec![
+        span(trunc_str(&quota_note, 58), C_MUTED),
+    ], w_right_inner, C_BORDER));
+
+    // Row 8: Command Center Divider
+    right_box_lines.push(vec![
+        span("├", C_BORDER),
+        span("─".repeat(w_right_inner), C_BORDER),
+        span("┤", C_BORDER),
+    ]);
+
+    // Rows 9, 10, 11: Commands
+    right_box_lines.push(box_row(vec![
         span("  ", C_TEXT),
         span(format!("[1-{}]", total_count), C_KEY),
-        span(" SWITCH       ", C_TEXT),
+        span(" Switch Account       ", C_TEXT),
         span("[A]", C_KEY),
-        span(" ADD         ", C_TEXT),
-        span("[D]", C_KEY),
-        span(" DELETE", C_TEXT),
-    ], C_BORDER));
-    lines.push(b.box_row(vec![
+        span(" Add Session", C_TEXT),
+    ], w_right_inner, C_BORDER));
+    right_box_lines.push(box_row(vec![
         span("  ", C_TEXT),
+        span("[D]", C_KEY),
+        span("    Delete Account       ", C_TEXT),
         span("[I]", C_KEY),
-        span("    IMPORT       ", C_TEXT),
+        span(" Import Backup", C_TEXT),
+    ], w_right_inner, C_BORDER));
+    right_box_lines.push(box_row(vec![
+        span("  ", C_TEXT),
         span("[R]", C_KEY),
-        span(" REFRESH     ", C_TEXT),
+        span("    Refresh Quotas       ", C_TEXT),
         span("[Q]", C_KEY),
-        span(" QUIT", C_TEXT),
-    ], C_BORDER));
-    lines.push(b.box_bottom(C_BORDER));
+        span(" Quit Switcher", C_TEXT),
+    ], w_right_inner, C_BORDER));
 
-    // 7. TERMINAL Card
-    lines.push(b.box_top("TERMINAL", C_BORDER, C_TITLE));
+    // Row 12: Prompt line
     let prompt_display = match state {
         InputState::Normal => if input_buf.is_empty() { "_".to_string() } else { format!("{input_buf}_") },
         InputState::PromptImport => format!("{input_buf}_"),
         InputState::ConfirmDelete(_, _) | InputState::PromptAdd => "_".to_string(),
     };
-    lines.push(b.box_row(vec![
+    right_box_lines.push(box_row(vec![
         span("  ❯ ", C_PROMPT),
-        span(format!("{:<67}", trunc_str(&prompt_display, 67)), C_TEXT),
-    ], C_BORDER));
-    lines.push(b.box_row(vec![
-        span("  ", C_TEXT),
-        span(format!("{:<69}", trunc_str(status_msg, 69)), C_TITLE),
-    ], C_BORDER));
-    lines.push(b.box_bottom(C_BORDER));
+        span(trunc_str(&prompt_display, 54), C_TEXT),
+    ], w_right_inner, C_BORDER));
 
-    // 8. Bottom Footer
-    lines.push(b.raw_line(vec![
-        span(format!("   {:<50}", "AGY AUTH / RUST"), C_TEXT),
-        span("● ", C_ACT_COUNT),
-        span("READY   ", C_TEXT),
-    ]));
-    lines.push(b.raw_line(vec![span("━".repeat(73), C_BORDER_DIM)]));
+    // Row 13: Status message
+    right_box_lines.push(box_row(vec![
+        span("  ", C_TEXT),
+        span(trunc_str(status_msg, 56), C_TITLE),
+    ], w_right_inner, C_BORDER));
+
+    // Pad right box lines if left box has more lines (so both boxes have identical row count)
+    while right_box_lines.len() < left_box_lines.len() - 1 {
+        right_box_lines.push(vec![
+            span("│", C_BORDER),
+            span(" ".repeat(w_right_inner), Color::Reset),
+            span("│", C_BORDER),
+        ]);
+    }
+
+    // Row 14: Footer
+    right_box_lines.push(vec![
+        span("╰", C_BORDER),
+        span("─".repeat(w_right_inner), C_BORDER),
+        span("╯", C_BORDER),
+    ]);
+
+    // Combine Left and Right box lines side-by-side
+    let max_side_rows = left_box_lines.len().max(right_box_lines.len());
+    for r in 0..max_side_rows {
+        let mut row_spans = vec![span(pad, Color::Reset)];
+        if r < left_box_lines.len() {
+            row_spans.extend(left_box_lines[r].clone());
+        } else {
+            row_spans.push(span(" ".repeat(59), Color::Reset));
+        }
+        row_spans.push(span(" ", Color::Reset)); // 1 space gap
+        if r < right_box_lines.len() {
+            row_spans.extend(right_box_lines[r].clone());
+        } else {
+            row_spans.push(span(" ".repeat(62), Color::Reset));
+        }
+        lines.push(row_spans);
+    }
 
     lines
 }
@@ -862,46 +987,79 @@ fn build_compact_lines(
     state: &InputState,
     pad: &str,
 ) -> Vec<Line> {
-    let b = LineBuilder::new(pad);
+    let b_border = C_BORDER;
     let total_count = reg.accounts.len();
     let active_count = if reg.accounts.iter().any(|a| a.id == reg.active) { 1 } else { 0 };
-    let inactive_count = total_count.saturating_sub(active_count);
+    let pro_count = reg.accounts.iter().filter(|a| matches!(a.plan.as_deref(), Some("Pro") | Some("Google AI Plus") | Some("Ultra"))).count();
+    let free_count = total_count.saturating_sub(pro_count);
 
     let mut lines = Vec::with_capacity(25);
 
     // 1. Compact Header (2 lines)
-    lines.push(b.raw_line(vec![
+    lines.push(vec![
+        span(pad, Color::Reset),
         span(format!("{:^73}", "█████╗  ██████╗ ██╗   ██╗      █████╗ ██╗   ██╗████████╗██╗  ██╗"), C_BANNER_2),
-    ]));
-    lines.push(b.raw_line(vec![span("━".repeat(73), C_BORDER_DIM)]));
+    ]);
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span("━".repeat(73), C_BORDER_DIM),
+    ]);
 
     // 2. DASHBOARD Stat Box (5 lines)
-    lines.push(b.box_top("DASHBOARD", C_BORDER, C_TITLE));
-    lines.push(b.box_row(vec![
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span("╭─ ", b_border),
+        span("DASHBOARD", C_TITLE),
+        span(format!(" {}╮", "─".repeat(59)), b_border),
+    ]);
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span("│", b_border),
         span(format!("{:^23}", "ACCOUNTS"), C_ACC_COUNT),
         span(format!("{:^25}", "ACTIVE"), C_ACT_COUNT),
         span(format!("{:^23}", "INACTIVE"), C_INA_COUNT),
-    ], C_BORDER));
-    lines.push(b.box_row(vec![
+        span("│", b_border),
+    ]);
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span("│", b_border),
         span(format!("{:^23}", format!("{:02}", total_count)), C_ACC_COUNT),
         span(format!("{:^25}", format!("{:02}", active_count)), C_ACT_COUNT),
-        span(format!("{:^23}", format!("{:02}", inactive_count)), C_INA_COUNT),
-    ], C_BORDER));
-    lines.push(b.box_row(vec![
+        span(format!("{:^23}", format!("{:02}", free_count)), C_INA_COUNT),
+        span("│", b_border),
+    ]);
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span("│", b_border),
         span(format!("{:^23}", "━━━━━━━━━"), C_ACC_COUNT),
         span(format!("{:^25}", "━━━━━━━━━"), C_ACT_COUNT),
         span(format!("{:^23}", "━━━━━━━━━"), C_INA_COUNT),
-    ], C_BORDER));
-    lines.push(b.box_bottom(C_BORDER));
+        span("│", b_border),
+    ]);
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span(format!("╰{}╯", "─".repeat(71)), b_border),
+    ]);
 
-    // 3. ACCOUNT VAULT Card (3 + vault_visible + 2 lines = 8 lines)
-    lines.push(b.box_top("ACCOUNT VAULT", C_BORDER, C_TITLE));
-    lines.push(b.box_row(vec![
-        span("  ID   STATUS     ACCOUNT / ALIAS             PROFILE       ADDED      ", C_TITLE)
-    ], C_BORDER));
-    lines.push(b.box_row(vec![
-        span("  ──   ─────────  ──────────────────────────  ───────────   ────────── ", C_DARK)
-    ], C_BORDER));
+    // 3. ACCOUNT VAULT Card (Table with 5H and WEEKLY columns)
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span("╭─ ", b_border),
+        span("ACCOUNT VAULT", C_TITLE),
+        span(format!(" {}╮", "─".repeat(55)), b_border),
+    ]);
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span("│", b_border),
+        span("  ID STATUS   ACCOUNT / ALIAS          PLAN    5-H   WEEK", C_TITLE),
+        span("│", b_border),
+    ]);
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span("│", b_border),
+        span("  ── ───────  ──────────────────────── ─────── ───── ────", C_DARK),
+        span("│", b_border),
+    ]);
 
     for i in offset..(offset + vault_visible).min(total_count) {
         let acc = &reg.accounts[i];
@@ -920,75 +1078,135 @@ fn build_compact_lines(
         } else {
             format!("{} ({})", acc.alias, acc.email)
         };
-        let name_padded = format!("{:<26}", trunc_str(&name, 26));
+        let name_padded = format!("{:<24}", trunc_str(&name, 24));
 
-        let (prof_str, prof_col) = if is_active || acc.has_desktop {
-            ("DEFAULT    ", C_PROF_DEF)
-        } else {
-            ("ISOLATED   ", C_PROF_ISO)
+        let plan_label = match acc.plan.as_deref() {
+            Some("Pro") => "Pro    ",
+            Some("Google AI Plus") => "AI Plus",
+            Some("Ultra") => "Ultra  ",
+            _ => "Free   ",
         };
-        let added_str = acc.added_at.format("%Y-%m-%d").to_string();
+        let plan_col = if plan_label.starts_with("Pro") || plan_label.starts_with("AI") {
+            C_ACT_COUNT
+        } else {
+            C_MUTED
+        };
+
+        let is_pro = matches!(acc.plan.as_deref(), Some("Pro") | Some("Google AI Plus") | Some("Ultra"));
+        let h5_str = if is_pro {
+            acc.quota_5h.map(|p| format!("{:>3}%", p)).unwrap_or_else(|| " 100%".into())
+        } else {
+            "  -- ".into()
+        };
+        let wk_str = acc.quota_weekly.map(|p| format!("{:>3}%", p)).unwrap_or_else(|| "100%".into());
 
         let row_bg = if is_selected { C_SEL_BG } else { Color::Reset };
-        let text_col = if is_selected { C_TEXT } else { C_TEXT };
+        let text_col = C_TEXT;
 
-        lines.push(b.box_row(vec![
+        lines.push(vec![
+            span(pad, Color::Reset),
+            span("│", b_border),
             span_bg("  ", text_col, row_bg),
             span_bg(id_str, if is_selected { C_SEL_ID } else { C_ACC_COUNT }, row_bg),
-            span_bg("   ", text_col, row_bg),
+            span_bg(" ", text_col, row_bg),
             span_bg(dot, st_col, row_bg),
             span_bg(" ", text_col, row_bg),
             span_bg(st_txt, st_col, row_bg),
-            span_bg("   ", text_col, row_bg),
-            span_bg(name_padded, if !acc.alias.is_empty() { C_TITLE } else { text_col }, row_bg),
-            span_bg("  ", text_col, row_bg),
-            span_bg(prof_str, prof_col, row_bg),
-            span_bg("  ", text_col, row_bg),
-            span_bg(added_str, C_MUTED, row_bg),
             span_bg(" ", text_col, row_bg),
-        ], C_BORDER));
+            span_bg(name_padded, if !acc.alias.is_empty() { C_TITLE } else { text_col }, row_bg),
+            span_bg(" ", text_col, row_bg),
+            span_bg(plan_label, plan_col, row_bg),
+            span_bg(" ", text_col, row_bg),
+            span_bg(format!("{:>5}", h5_str), if is_pro { C_ACT_COUNT } else { C_DARK }, row_bg),
+            span_bg(" ", text_col, row_bg),
+            span_bg(format!("{:>4}", wk_str), C_TEXT, row_bg),
+            span("│", b_border),
+        ]);
     }
 
-    lines.push(b.box_row(vec![
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span("│", b_border),
         span("  ● ACTIVE: ", C_ACT_COUNT),
         span(format!("{:02}", active_count), C_TEXT),
-        span("          ○ INACTIVE: ", C_INA_COUNT),
-        span(format!("{:02}", inactive_count), C_TEXT),
-        span("          TOTAL: ", C_TITLE),
-        span(format!("{:02}", total_count), C_ACC_COUNT),
-    ], C_BORDER));
-    lines.push(b.box_bottom(C_BORDER));
+        span("   ○ IDLE: ", C_MUTED),
+        span(format!("{:02}", total_count.saturating_sub(active_count)), C_TEXT),
+        span("   PRO: ", C_ACT_COUNT),
+        span(format!("{:02}", pro_count), C_TEXT),
+        span("   FREE: ", C_INA_COUNT),
+        span(format!("{:02}", free_count), C_TEXT),
+        span("        │", b_border),
+    ]);
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span(format!("╰{}╯", "─".repeat(71)), b_border),
+    ]);
 
-    // 4. Compact ACCOUNT DETAILS Card (4 lines)
+    // 4. Compact ACCOUNT DETAILS & USAGE Card
     let cur_acc = &reg.accounts[selected];
+    let is_cur_pro = matches!(cur_acc.plan.as_deref(), Some("Pro") | Some("Google AI Plus") | Some("Ultra"));
     let badge = format!("[ {:02} / {:02} ]", selected + 1, total_count);
-    lines.push(b.box_top_badge("ACCOUNT DETAILS", &badge, C_BORDER, C_TITLE, C_KEY));
+    let d_prefix = "╭─ ACCOUNT DETAILS & USAGE ";
+    let d_suffix = format!(" {badge} ╮");
+    let d_dashes = 73usize.saturating_sub(d_prefix.chars().count() + d_suffix.chars().count());
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span(d_prefix, b_border),
+        span(format!("{} ", "─".repeat(d_dashes)), b_border),
+        span(&badge, C_KEY),
+        span(" ╮", b_border),
+    ]);
 
     let email_display = cur_acc.display();
-    lines.push(b.box_row(vec![
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span("│", b_border),
         span("  EMAIL: ", C_TITLE),
         span(format!("{:<62}", trunc_str(&email_display, 62)), C_TEXT),
-    ], C_BORDER));
+        span("│", b_border),
+    ]);
 
-    let prof_display = if cur_acc.id == reg.active || cur_acc.has_desktop { "DEFAULT" } else { "ISOLATED" };
-    let is_cur_active = cur_acc.id == reg.active;
-    let (usage_text, usage_col) = match cur_acc.plan.as_deref() {
-        Some(p) if !p.is_empty() => (format!("{p} (Verified)"), C_ACTIVE_DOT),
-        _ => ("N/A".to_string(), C_MUTED),
-    };
-    lines.push(b.box_row(vec![
-        span("  PROFILE: ", C_TITLE),
-        span(format!("{:<10}", prof_display), if cur_acc.id == reg.active || cur_acc.has_desktop { C_PROF_DEF } else { C_PROF_ISO }),
-        span("   STATUS: ", C_TITLE),
-        span(if is_cur_active { "● ACTIVE  " } else { "○ IDLE    " }, if is_cur_active { C_ACTIVE_DOT } else { C_IDLE_DOT }),
-        span("   PLAN: ", C_TITLE),
-        span(format!("{:<19}", trunc_str(&usage_text, 19)), usage_col),
-    ], C_BORDER));
-    lines.push(b.box_bottom(C_BORDER));
+    let q_5h = cur_acc.quota_5h.unwrap_or(100);
+    let q_wk = cur_acc.quota_weekly.unwrap_or(if is_cur_pro { 48 } else { 100 });
+
+    if is_cur_pro {
+        lines.push(vec![
+            span(pad, Color::Reset),
+            span("│", b_border),
+            span("  5-HOUR: ", C_TITLE),
+            span(format!("{:>3}%", q_5h), C_ACT_COUNT),
+            span("  ·  WEEKLY: ", C_TITLE),
+            span(format!("{:>3}%", q_wk), C_ACT_COUNT),
+            span("  ·  TIER: ", C_TITLE),
+            span(format!("{:<27}", cur_acc.plan.as_deref().unwrap_or("Pro")), C_TEXT),
+            span("│", b_border),
+        ]);
+    } else {
+        lines.push(vec![
+            span(pad, Color::Reset),
+            span("│", b_border),
+            span("  WEEKLY: ", C_TITLE),
+            span(format!("{:>3}%", q_wk), C_ACT_COUNT),
+            span("  ·  5-HOUR: ", C_MUTED),
+            span("N/A (Free Tier has weekly quota only)      ", C_DARK),
+            span("│", b_border),
+        ]);
+    }
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span(format!("╰{}╯", "─".repeat(71)), b_border),
+    ]);
 
     // 5. Compact COMMAND & TERMINAL Card (4 lines)
-    lines.push(b.box_top("COMMAND CENTER & TERMINAL", C_BORDER, C_TITLE));
-    lines.push(b.box_row(vec![
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span("╭─ ", b_border),
+        span("COMMAND CENTER & TERMINAL", C_TITLE),
+        span(format!(" {}╮", "─".repeat(43)), b_border),
+    ]);
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span("│", b_border),
         span("  ", C_TEXT),
         span(format!("[1-{}]", total_count), C_KEY),
         span(" SWITCH   ", C_TEXT),
@@ -1002,7 +1220,8 @@ fn build_compact_lines(
         span(" REFRESH   ", C_TEXT),
         span("[Q]", C_KEY),
         span(" QUIT", C_TEXT),
-    ], C_BORDER));
+        span(" │", b_border),
+    ]);
 
     let prompt_display = match state {
         InputState::Normal => if input_buf.is_empty() { "_".to_string() } else { format!("{input_buf}_") },
@@ -1011,13 +1230,19 @@ fn build_compact_lines(
     };
     let prompt_val = trunc_str(&prompt_display, 12);
     let status_val = trunc_str(status_msg, 50);
-    lines.push(b.box_row(vec![
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span("│", b_border),
         span("  ❯ ", C_PROMPT),
         span(format!("{:<12}", prompt_val), C_TEXT),
         span("  ·  ", C_MUTED),
         span(format!("{:<50}", status_val), C_TITLE),
-    ], C_BORDER));
-    lines.push(b.box_bottom(C_BORDER));
+        span("│", b_border),
+    ]);
+    lines.push(vec![
+        span(pad, Color::Reset),
+        span(format!("╰{}╯", "─".repeat(71)), b_border),
+    ]);
 
     lines
 }

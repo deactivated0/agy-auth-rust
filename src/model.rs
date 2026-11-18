@@ -33,9 +33,17 @@ pub struct Account {
     pub last_used_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota_5h: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota_weekly: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota_reset_5h: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota_reset_weekly: Option<String>,
 }
 impl Default for Account {
-    fn default()->Self {Self{id:String::new(),email:String::new(),subject:String::new(),alias:String::new(),auth_method:String::new(),project_id:String::new(),region:String::new(),fingerprint:String::new(),has_cli:false,has_desktop:false,added_at:Utc::now(),last_used_at:None,plan:None}}
+    fn default()->Self {Self{id:String::new(),email:String::new(),subject:String::new(),alias:String::new(),auth_method:String::new(),project_id:String::new(),region:String::new(),fingerprint:String::new(),has_cli:false,has_desktop:false,added_at:Utc::now(),last_used_at:None,plan:None,quota_5h:None,quota_weekly:None,quota_reset_5h:None,quota_reset_weekly:None}}
 }
 impl Account {
     pub fn display(&self) -> String {
@@ -190,7 +198,7 @@ impl Credential {
         Ok(self)
     }
     pub fn account(&self, alias: &str) -> Account {
-        Account { id: self.id(), email: self.email.clone(), subject: self.subject.clone(), alias: alias.into(), auth_method: self.auth_method().into(), project_id: self.field("project_id").into(), region: self.field("region").into(), fingerprint: self.fingerprint.clone(), has_cli: true, has_desktop: false, added_at: Utc::now(), last_used_at: None, plan: None }
+        Account { id: self.id(), email: self.email.clone(), subject: self.subject.clone(), alias: alias.into(), auth_method: self.auth_method().into(), project_id: self.field("project_id").into(), region: self.field("region").into(), fingerprint: self.fingerprint.clone(), has_cli: true, has_desktop: false, added_at: Utc::now(), last_used_at: None, plan: None, quota_5h: None, quota_weekly: None, quota_reset_5h: None, quota_reset_weekly: None }
     }
 }
 

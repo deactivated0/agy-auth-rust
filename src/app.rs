@@ -169,10 +169,14 @@ pub fn run()->Result<()> {
                     let mut changed = false;
                     for a in &mut r_mut.accounts {
                         if let Some((_, Ok(u))) = usage.iter().find(|(uid, _)| uid == &a.id) {
-                            if !u.plan.is_empty() && a.plan.as_deref() != Some(&u.plan) {
+                            if !u.plan.is_empty() {
                                 a.plan = Some(u.plan.clone());
-                                changed = true;
                             }
+                            a.quota_5h = u.five_hour.as_ref().map(|b| b.remaining_percent);
+                            a.quota_weekly = u.weekly.as_ref().map(|b| b.remaining_percent);
+                            a.quota_reset_5h = u.five_hour.as_ref().and_then(|b| b.reset_time.clone());
+                            a.quota_reset_weekly = u.weekly.as_ref().and_then(|b| b.reset_time.clone());
+                            changed = true;
                         }
                     }
                     if changed {
@@ -316,6 +320,10 @@ pub fn run()->Result<()> {
                     if !u.plan.is_empty() {
                         a.plan = Some(u.plan.clone());
                     }
+                    a.quota_5h = u.five_hour.as_ref().map(|b| b.remaining_percent);
+                    a.quota_weekly = u.weekly.as_ref().map(|b| b.remaining_percent);
+                    a.quota_reset_5h = u.five_hour.as_ref().and_then(|b| b.reset_time.clone());
+                    a.quota_reset_weekly = u.weekly.as_ref().and_then(|b| b.reset_time.clone());
                 }
             }
             r.normalize()?;
