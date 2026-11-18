@@ -264,6 +264,9 @@ Commands:
   sudo xbps-install -Sy base-devel dbus-devel
   ```
 
+- **NixOS:**
+  See the dedicated [NixOS & Nix Flakes](#-nixos--nix-flakes) section below.
+
 </details>
 
 #### 2. Install via Cargo (One-Liner)
@@ -287,6 +290,67 @@ curl -s https://api.github.com/repos/deactivated0/agy-auth-rust/releases/latest 
 Register `agy-switch` into your desktop launcher (GNOME, KDE Plasma, XFCE, Rofi, Wofi, Albert):
 ```sh
 agy-auth-rust desktop
+```
+
+---
+
+### ❄️ NixOS & Nix Flakes
+
+`agy-auth-rust` provides first-class support for Nix Flakes (`flake.nix`) for both NixOS and non-NixOS Linux / macOS with Nix.
+
+#### 1. Quick Ad-Hoc Execution (No Installation Required)
+Run binaries ephemerally via `nix run`:
+```sh
+# Run agy-auth-rust CLI directly
+nix run github:deactivated0/agy-auth-rust -- list
+
+# Launch interactive switcher TUI
+nix run github:deactivated0/agy-auth-rust#agy-switch
+```
+
+#### 2. Declarative NixOS System Configuration
+Add `agy-auth-rust` to your system's `flake.nix`:
+```nix
+{
+  description = "NixOS configuration";
+
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    agy-auth-rust.url = "github:deactivated0/agy-auth-rust";
+  };
+
+  outputs = { self, nixpkgs, agy-auth-rust, ... }: {
+    nixosConfigurations.myhostname = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux"; # or "aarch64-linux"
+      modules = [
+        ({ pkgs, ... }: {
+          environment.systemPackages = [
+            agy-auth-rust.packages.${pkgs.system}.default
+          ];
+        })
+      ];
+    };
+  };
+}
+```
+Rebuild your system:
+```sh
+sudo nixos-rebuild switch --flake .#myhostname
+```
+
+#### 3. Declarative Home Manager Configuration
+Add to your `home.nix`:
+```nix
+{ inputs, pkgs, ... }: {
+  home.packages = [
+    inputs.agy-auth-rust.packages.${pkgs.system}.default
+  ];
+}
+```
+
+#### 4. Imperative Installation via Nix Profile
+```sh
+nix profile install github:deactivated0/agy-auth-rust
 ```
 
 ---
