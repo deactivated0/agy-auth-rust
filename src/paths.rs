@@ -6,7 +6,7 @@ pub struct Paths { pub base:PathBuf, pub accounts:PathBuf, pub desktop_snapshots
 impl Paths {
     pub fn discover() -> Result<Self> {
         let home=dirs::home_dir().ok_or_else(||anyhow!("HOME directory not found"))?;
-        let base=env::var_os("AGYBUFF_AUTH_HOME").or_else(||env::var_os("AGY_AUTH_HOME")).map(PathBuf::from).unwrap_or_else(||dirs::config_dir().unwrap_or_else(||home.join(".config")).join("agy-auth"));
+        let base=env::var_os("AGY_AUTH_RUST_HOME").or_else(||env::var_os("AGYBUFF_AUTH_HOME")).or_else(||env::var_os("AGY_AUTH_HOME")).map(PathBuf::from).unwrap_or_else(||dirs::config_dir().unwrap_or_else(||home.join(".config")).join("agy-auth"));
         let cli_dir=home.join(".gemini/antigravity-cli");
         let live_token=env::var_os("AGY_AUTH_AGY_TOKEN_FILE").map(PathBuf::from).unwrap_or_else(||cli_dir.join("antigravity-oauth-token"));
         let live_settings=env::var_os("AGY_AUTH_AGY_SETTINGS_FILE").map(PathBuf::from).unwrap_or_else(||live_token.parent().unwrap_or(&cli_dir).join("settings.json"));
@@ -46,7 +46,7 @@ pub fn read_limit(path:&Path,max:u64)->Result<Vec<u8>>{
 pub fn atomic_write(path:&Path,bytes:&[u8])->Result<()> {
     let dir=path.parent().ok_or_else(||anyhow!("path missing parent"))?;
     secure_dir(dir)?;
-    let mut temp=tempfile::Builder::new().prefix(".agybuff-").tempfile_in(dir)?;
+    let mut temp=tempfile::Builder::new().prefix(".agy-auth-rust-").tempfile_in(dir)?;
     #[cfg(unix)]{use std::os::unix::fs::PermissionsExt;temp.as_file().set_permissions(fs::Permissions::from_mode(0o600))?;}
     temp.write_all(bytes)?;
     temp.as_file().sync_all()?;

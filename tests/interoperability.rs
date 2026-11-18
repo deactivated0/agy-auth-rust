@@ -1,4 +1,4 @@
-use agybuff_auth::{crypto,model::{Credential,Registry,Account},paths::atomic_write};
+use agy_auth_rust::{crypto,model::{Credential,Registry,Account},paths::atomic_write};
 use chrono::Utc;
 use sha2::{Digest,Sha256};
 

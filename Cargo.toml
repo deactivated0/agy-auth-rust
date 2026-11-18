@@ -1,5 +1,5 @@
 [package]
-name = "agybuff-auth"
+name = "agy-auth-rust"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.78"
@@ -7,11 +7,11 @@ license = "MIT"
 description = "Native Rust Antigravity CLI and Desktop multi-account manager"
 
 [[bin]]
-name = "agybuff-auth"
+name = "agy-auth-rust"
 path = "src/main.rs"
 
 [[bin]]
-name = "agybuff-switch"
+name = "agy-switch"
 path = "src/switch.rs"
 
 [dependencies]

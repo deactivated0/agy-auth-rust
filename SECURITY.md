@@ -37,7 +37,7 @@ as available quota.
 
 - Back up `~/.config/agy-auth` and the encryption key before first use.
 - Do not run the Go original and this experimental Rust port concurrently.
-- Test against a copied data directory with `AGYBUFF_AUTH_HOME` first.
+- Test against a copied data directory with `AGY_AUTH_RUST_HOME` (or `AGYBUFF_AUTH_HOME`) first.
 - Never paste refresh tokens, access tokens, cookies, or keys into a bug report.
 - The supplied interoperability fixtures were generated from fictional test
   values only. They cannot authenticate to any service.

@@ -17,7 +17,7 @@ cargo fmt --all
 cargo test --all-targets
 cargo clippy --all-targets
 cargo build --release
-./target/release/agybuff-auth --help
+./target/release/agy-auth-rust --help
 ```
 
 Avoid pointing an unverified build at your only copy of valuable credentials.

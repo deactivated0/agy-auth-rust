@@ -31,7 +31,7 @@ fn copy_file(from:&Path,to:&Path)->Result<()> {
     // Large SQLite files are streamed through a secure temp file instead of accumulating in memory.
     secure_dir(to.parent().ok_or_else(||anyhow!("missing destination directory"))?)?;
     let mut input=fs::File::open(from)?;
-    let mut tmp=tempfile::Builder::new().prefix(".agybuff-").tempfile_in(to.parent().unwrap())?;
+    let mut tmp=tempfile::Builder::new().prefix(".agy-auth-rust-").tempfile_in(to.parent().unwrap())?;
     #[cfg(unix)]{use std::os::unix::fs::PermissionsExt;tmp.as_file().set_permissions(fs::Permissions::from_mode(0o600))?;}
     io::copy(&mut input,&mut tmp)?;tmp.as_file().sync_all()?;
     tmp.persist(to).map_err(|e|e.error)?;Ok(())

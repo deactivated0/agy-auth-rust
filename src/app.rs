@@ -5,7 +5,7 @@ use std::{collections::HashSet,env,fs,io::{self,IsTerminal,Write},path::{Path,Pa
 use crate::{desktop,formats,model::{Account,Credential,Registry},oauth,paths,quota,store::Store,tui::{self,Mode}};
 
 #[derive(Parser,Debug)]
-#[command(name="agybuff-auth",version,about="Fast Rust Antigravity multi-account manager",long_about=None)]
+#[command(name="agy-auth-rust",version,about="Fast Rust Antigravity multi-account manager",long_about=None)]
 pub struct Cli {
     #[arg(long,global=true)]json:bool,
     #[arg(long,global=true)]no_color:bool,
@@ -127,7 +127,7 @@ pub fn run()->Result<()> {
         }
         CommandLine::Version{check}=>{
             if check {eprintln!("Automatic update checks are not implemented in this version; review the source repository's releases.");}
-            output(json!({"name":"agybuff-auth","version":env!("CARGO_PKG_VERSION")}),||println!("agybuff-auth {}",env!("CARGO_PKG_VERSION")),json_flag)?;
+            output(json!({"name":"agy-auth-rust","version":env!("CARGO_PKG_VERSION")}),||println!("agy-auth-rust {}",env!("CARGO_PKG_VERSION")),json_flag)?;
         }
         CommandLine::Current=>{
             let live=store.read_live()?;

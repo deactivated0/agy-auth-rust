@@ -37,7 +37,7 @@ fn plan(tier:&Value,credential:&Credential)->String {
 }
 fn post(ag:&ureq::Agent,method:&str,token:&str,body:&Value)->Result<Value>{
     let url=format!("{API}:{method}");
-    let ua=format!("antigravity/cli/1.4.5 (agybuff-auth/{}; os_type={}; arch={}; auth_method=consumer)",env!("CARGO_PKG_VERSION"),std::env::consts::OS,std::env::consts::ARCH);
+    let ua=format!("antigravity/cli/1.4.5 (agy-auth-rust/{}; os_type={}; arch={}; auth_method=consumer)",env!("CARGO_PKG_VERSION"),std::env::consts::OS,std::env::consts::ARCH);
     let response=ag.post(&url).set("Authorization",&format!("Bearer {token}")).set("User-Agent",&ua).set("Accept","application/json").send_json(body.clone());
     let response=response.map_err(|e|anyhow!("quota {method}: {e}"))?;
     if response.status()>=300{bail!("quota {method} failed (HTTP {})",response.status());}

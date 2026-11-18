@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>AgyBuff Auth</h1>
+  <h1>agy-auth-rust</h1>
   <p><strong>Native Rust multi-account switcher for Google Antigravity CLI and Desktop.</strong></p>
   <p>Inspired by <a href="https://github.com/deactivated0/freebuff-auth">FreeBuff Auth</a>. Ported from the architecture and command set of <a href="https://github.com/fikrilal/agy-auth">agy-auth</a>.</p>
 </div>
@@ -8,7 +8,7 @@
 
 ## Goals
 
-- Fully native Rust binaries named `agybuff-auth` and `agybuff-switch`.
+- Fully native Rust binaries named `agy-auth-rust` (with `agy-auth` alias) and `agy-switch`.
 - Reuse existing `agy-auth` registry, encrypted snapshots and encryption key rather than forcing account re-login.
 - Fast CLI switching between multiple Antigravity accounts, CLI/desktop credential storage, per-account installation UUIDs.
 - Google OAuth PKCE, including optional GCP project mode.
@@ -24,8 +24,8 @@ cargo test
 cargo build --release
 cargo install --path .
 
-agybuff-auth --help
-agybuff-auth status
+agy-auth-rust --help
+agy-auth-rust status
 ```
 
 Release builds use LTO, one codegen unit, stripping, and `opt-level = 3` for throughput. For minimal binary size instead:
@@ -39,27 +39,27 @@ The result is **source code**, not a precompiled executable. No actual throughpu
 ## Quick start
 
 ```sh
-agybuff-auth add --alias personal            # register current agy CLI login
-agybuff-auth login --alias work               # OAuth browser login
-agybuff-auth login --via-agy --alias test     # optional: launch official agy in isolated HOME
-agybuff-auth list --no-usage                  # offline account listing
-agybuff-auth list                             # quota-enriched listing
-agybuff-auth usage --all                      # all account quota groups
-agybuff-auth switch work                      # switch selected CLI / saved Desktop session
-agybuff-auth switch -                         # return to previous account
-agybuff-auth rotate                           # only when current quota is exhausted
-agybuff-auth rotate --force                   # force switch to a healthy alternative
-agybuff-switch                                # arrow-key account picker
+agy-auth-rust add --alias personal            # register current agy CLI login
+agy-auth-rust login --alias work               # OAuth browser login
+agy-auth-rust login --via-agy --alias test     # optional: launch official agy in isolated HOME
+agy-auth-rust list --no-usage                  # offline account listing
+agy-auth-rust list                             # quota-enriched listing
+agy-auth-rust usage --all                      # all account quota groups
+agy-auth-rust switch work                      # switch selected CLI / saved Desktop session
+agy-auth-rust switch -                         # return to previous account
+agy-auth-rust rotate                           # only when current quota is exhausted
+agy-auth-rust rotate --force                   # force switch to a healthy alternative
+agy-switch                                     # arrow-key account picker
 ```
 
 For GCP Pay As You Go:
 
 ```sh
-agybuff-auth login --gcp --project my-gcp-project --region global --alias work
-agybuff-auth switch work --target cli
+agy-auth-rust login --gcp --project my-gcp-project --region global --alias work
+agy-auth-rust switch work --target cli
 ```
 
-Run `agybuff-auth --help` for all flags and options. When switching to a Desktop account, close Antigravity Desktop first or pass `--close-desktop`; add `--relaunch` to start it again. A running `agy` process keeps the old credential until restarted.
+Run `agy-auth-rust --help` for all flags and options. When switching to a Desktop account, close Antigravity Desktop first or pass `--close-desktop`; add `--relaunch` to start it again. A running `agy` process keeps the old credential until restarted.
 
 ## Command overview
 
@@ -80,7 +80,7 @@ Run `agybuff-auth --help` for all flags and options. When switching to a Desktop
 | `clean --dry-run` | Preview orphan cleanup and old-backup pruning |
 | `path` / `version` | Paths and build version |
 
-`--json` is global. The interactive picker accepts arrow keys, Home/End, PgUp/PgDn, `j`/`k`, Enter and Escape. `agybuff-auth switch --live` currently opens the picker, but is not yet a continuously refreshed quota TUI.
+`--json` is global. The interactive picker accepts arrow keys, Home/End, PgUp/PgDn, `j`/`k`, Enter and Escape. `agy-auth-rust switch --live` currently opens the picker, but is not yet a continuously refreshed quota TUI.
 
 ## Existing agy-auth data compatibility
 
@@ -101,8 +101,8 @@ It reads `agy-auth-encrypted:v1:` snapshots with the original AES-256-GCM envelo
 **Back up your whole `agy-auth` directory and key before first use.** The program writes snapshots and metadata, so don't test it on the only copy of valuable credentials. For dry testing on a copy:
 
 ```sh
-cp -a ~/.config/agy-auth /tmp/agybuff-test
-AGYBUFF_AUTH_HOME=/tmp/agybuff-test AGY_AUTH_STORAGE=file agybuff-auth list --no-sync --no-usage
+cp -a ~/.config/agy-auth /tmp/agy-auth-test
+AGY_AUTH_RUST_HOME=/tmp/agy-auth-test AGY_AUTH_STORAGE=file agy-auth-rust list --no-sync --no-usage
 ```
 
 ### Supported input formats (private data stays on your computer)
@@ -118,16 +118,16 @@ AGYBUFF_AUTH_HOME=/tmp/agybuff-test AGY_AUTH_STORAGE=file agybuff-auth list --no
 To import an existing encrypted snapshot using a separate key:
 
 ```sh
-agybuff-auth import /private/backup/acct_xxxxxxxxxx.json --key /private/backup/encryption.key
+agy-auth-rust import /private/backup/acct_xxxxxxxxxx.json --key /private/backup/encryption.key
 ```
 
 To import a standard local OAuth JSON file:
 
 ```sh
-agybuff-auth import /private/credentials.json --alias personal
+agy-auth-rust import /private/credentials.json --alias personal
 ```
 
-`registry.json` by itself is **metadata only**, not a credential export. Use `agybuff-auth import --purge` to reconstruct metadata from existing snapshots in the configured store. This tool never uploads your credentials, token JSON, or encryption key to the source project. Google OAuth and quota queries still contact Google's own endpoints as required for authentication and usage. Do not run these commands on other people's data without authorization.
+`registry.json` by itself is **metadata only**, not a credential export. Use `agy-auth-rust import --purge` to reconstruct metadata from existing snapshots in the configured store. This tool never uploads your credentials, token JSON, or encryption key to the source project. Google OAuth and quota queries still contact Google's own endpoints as required for authentication and usage. Do not run these commands on other people's data without authorization.
 
 **The ZIP contains only source code, documentation, and artificial test fixtures. No authentic user tokens, accounts, cookies, keys, or private profiles are included.**
 
@@ -171,4 +171,4 @@ This package does not claim behavior-perfect parity, successful compilation, pas
 - [fikrilal/agy-auth](https://github.com/fikrilal/agy-auth), reference architecture, behavior and formats (MIT).
 - [deactivated0/freebuff-auth](https://github.com/deactivated0/freebuff-auth), Rust CLI concept and naming inspiration (MIT).
 
-AgyBuff Auth source code is distributed under the MIT license. This is an unofficial project, not affiliated with Google.
+agy-auth-rust source code is distributed under the MIT license. This is an unofficial project, not affiliated with Google.

@@ -32,13 +32,13 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          tar -czf dist/agybuff-auth-${{ github.ref_name }}-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release agybuff-auth agybuff-switch
+          tar -czf dist/agy-auth-rust-${{ github.ref_name }}-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release agy-auth-rust agy-switch
       - name: Package Windows
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          Compress-Archive -Path 'target/${{ matrix.target }}/release/agybuff-auth.exe','target/${{ matrix.target }}/release/agybuff-switch.exe' -DestinationPath 'dist/agybuff-auth-${{ github.ref_name }}-${{ matrix.target }}.zip'
+          Compress-Archive -Path 'target/${{ matrix.target }}/release/agy-auth-rust.exe','target/${{ matrix.target }}/release/agy-switch.exe' -DestinationPath 'dist/agy-auth-rust-${{ github.ref_name }}-${{ matrix.target }}.zip'
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}

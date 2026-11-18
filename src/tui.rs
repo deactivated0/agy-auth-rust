@@ -49,7 +49,7 @@ fn paint(accounts:&[Account],active:&str,mode:Mode,selected:usize,marked:&HashSe
     let mut out=io::stdout();
     let (width,_)=terminal::size()?;
     let w=(width as usize).max(12);
-    execute!(out,cursor::MoveTo(0,0),terminal::Clear(ClearType::All),SetForegroundColor(Color::Cyan),Print(" AgyBuff Auth "),ResetColor)?;
+    execute!(out,cursor::MoveTo(0,0),terminal::Clear(ClearType::All),SetForegroundColor(Color::Cyan),Print(" agy-auth-rust "),ResetColor)?;
     let title=match mode{Mode::List=>"Accounts",Mode::Switch=>"Select account",Mode::Remove=>"Select accounts to remove"};
     execute!(out,Print(format!("| {title} | {} stored\r\n\r\n",accounts.len())))?;
     for (i,a) in accounts.iter().enumerate().skip(offset).take(visible) {
