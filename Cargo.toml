@@ -4,7 +4,13 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.78"
 license = "MIT"
-description = "Native Rust Antigravity CLI and Desktop multi-account manager"
+description = "Native Rust Antigravity CLI and Desktop multi-account manager with real-time quota dashboard"
+repository = "https://github.com/deactivated0/agy-auth-rust"
+homepage = "https://github.com/deactivated0/agy-auth-rust"
+readme = "README.md"
+keywords = ["antigravity", "gemini", "oauth2", "tui", "account-switcher"]
+categories = ["command-line-utilities", "development-tools"]
+authors = ["deactivated0 <deactivated0@users.noreply.github.com>"]
 
 [[bin]]
 name = "agy-auth-rust"

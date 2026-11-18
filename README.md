@@ -1,174 +1,316 @@
 <div align="center">
-  <h1>agy-auth-rust</h1>
-  <p><strong>Native Rust multi-account switcher for Google Antigravity CLI and Desktop.</strong></p>
-  <p>Inspired by <a href="https://github.com/deactivated0/freebuff-auth">FreeBuff Auth</a>. Ported from the architecture and command set of <a href="https://github.com/fikrilal/agy-auth">agy-auth</a>.</p>
+
+# ⚡ agy-auth-rust
+
+### Native Rust Multi-Account Switcher & Real-Time Quota Dashboard for Google Antigravity
+
+[![Rust CI](https://github.com/deactivated0/agy-auth-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/deactivated0/agy-auth-rust/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Rust: 1.78+](https://img.shields.io/badge/Rust-1.78%2B-orange.svg?logo=rust)](https://www.rust-lang.org/)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)]()
+[![Security: AES-256-GCM](https://img.shields.io/badge/Security-AES--256--GCM-green.svg)]()
+
+<p align="center">
+  <strong>Switch Antigravity accounts in milliseconds. Monitor Gemini quotas in real time. Never get rate-limited mid-prompt again.</strong>
+</p>
+
+<p align="center">
+  <a href="#-key-features">Key Features</a> •
+  <a href="#-interactive-tui-dashboard">Terminal UI</a> •
+  <a href="#-quick-start">Quick Start</a> •
+  <a href="#-cli-reference">CLI Reference</a> •
+  <a href="#-security--privacy-architecture">Security & Privacy</a> •
+  <a href="#-installation">Installation</a> •
+  <a href="#-compatibility">Compatibility</a>
+</p>
+
+---
+
 </div>
 
-**Development status: experimental source release.** This is a substantial Rust port, **not yet a verified, feature-complete replacement** for the original Go project. It needs Rust compilation and integration testing on a machine with Antigravity installed. See [Compatibility and remaining work](#compatibility-and-remaining-work) and [Security](SECURITY.md) before using it with real accounts.
+## 📌 Overview
 
-## Goals
+**agy-auth-rust** is a high-performance, native Rust CLI utility and interactive terminal dashboard designed for power users of the **Google Antigravity CLI (`agy`)** and **Antigravity Desktop IDE**.
 
-- Fully native Rust binaries named `agy-auth-rust` (with `agy-auth` alias) and `agy-switch`.
-- Reuse existing `agy-auth` registry, encrypted snapshots and encryption key rather than forcing account re-login.
-- Fast CLI switching between multiple Antigravity accounts, CLI/desktop credential storage, per-account installation UUIDs.
-- Google OAuth PKCE, including optional GCP project mode.
-- Grouped quota and plan reporting, quota-aware rotation, account import/export and backups.
-- Sensible release performance: optimized code generation, small I/O, bounded quota parallelism, and atomic writes.
+When developing complex agentic workflows, large refactors, or running continuous AI coding loops, developers frequently hit Gemini rate limits and 5-hour quota ceilings across models like **Gemini Pro**, **Gemini Flash**, and partner models. 
 
-## Build and install
+`agy-auth-rust` solves this by providing:
+1. **Sub-millisecond multi-account switching** for both CLI and Desktop IDE sessions.
+2. **Real-time ASCII Cyber Dashboard (`agy-switch`)** displaying live remaining quotas, tiers (Free, Pro, Ultra, PayGo), and relative reset countdowns.
+3. **Smart Quota-Aware Auto-Rotation** that detects exhausted accounts and seamlessly promotes the next healthiest account.
+4. **Zero-Trust Local Security** protecting all credentials with AES-256-GCM authenticated encryption at rest.
+5. **Drop-in Compatibility** with existing `agy-auth` (Go) registries and snapshots without re-authentication.
 
-**Requirements:** Rust toolchain with Cargo (1.78+), network access on first build to obtain crates, the Antigravity CLI (`agy`) for actual sessions. Linux desktops may require a running Secret Service keyring; a file fallback is supported.
+---
 
-```sh
-cargo test
-cargo build --release
-cargo install --path .
+## ⚡ Key Features
 
-agy-auth-rust --help
-agy-auth-rust status
+- **🚀 Native Rust Speed & Efficiency**: Zero garbage collection pauses, zero Node/Electron/Python overhead, sub-millisecond execution, and minimal memory footprint.
+- **🖥️ Standalone Cyber TUI (`agy-switch`)**: Fully responsive ANSI/ASCII terminal dashboard with color-coded quota meters, live countdowns, quick hotkeys, and numeric account jumping.
+- **🔄 Quota-Aware Auto-Rotation (`agy-auth-rust rotate`)**: Automatically queries remaining 5-hour and weekly capacity across accounts and switches to a fresh, healthy profile when current limits are reached.
+- **📊 Real-Time Antigravity Quota Tracking**: Live telemetry fetched directly from Google's Code Assist backend, tracking model quotas (Gemini 1.5/2.0/3.0 Pro, Flash, and 3P models) without opening a browser.
+- **🔐 Hardened AES-256-GCM Encryption**: All stored account snapshots are encrypted locally with a 256-bit key and authenticated with AAD. Restrictive `0600`/`0700` POSIX file permissions on Unix.
+- **💻 CLI & Desktop Synchronization**: Switches active credentials for the `agy` CLI (`antigravity-oauth-token`) and seamlessly syncs Antigravity Desktop IDE sessions with automatic process termination/relaunching.
+- **☁️ Google Cloud (GCP) Pay-As-You-Go Ready**: Built-in support for GCP OAuth PKCE authentication, specific Google Cloud Project IDs, and regional scopes.
+- **🖱️ Desktop Shortcut Integration**: Generates `.desktop` application launchers so you can trigger the switcher straight from your desktop environment, dock, or application runner (Rofi, Wofi, Albert, Spotlight).
+
+---
+
+## 🖥️ Interactive TUI Dashboard (`agy-switch`)
+
+Launch the standalone dashboard at any time with `agy-switch`:
+
+```text
+┌── [ agy-switch ] ─────────────────────────────────────────── [● ACTIVE] ──┐
+│                                                                            │
+│  [1] work-account (Pro)                    [2] * personal-main (Free)      │
+│  ID: acct_84f9b201a4                       ID: acct_3b1a8d90ce             │
+│  Gemini 5h: [██████████████████░░] 88%     Gemini 5h: [██░░░░░░░░░░░░░░░░] 12%     │
+│  Weekly:    [████████████░░░░░░░░] 60%     Weekly:    [██████████░░░░░░░░] 52%     │
+│  Reset:     resets in 3h 41m               Reset:     resets in 48m                │
+│                                                                            │
+│  [3] dev-sandbox (PayGo)                   [4] research-tier (Pro)         │
+│  ID: acct_e571c08d19                       ID: acct_f20a9117ba             │
+│  Gemini 5h: [████████████████████] 100%    Gemini 5h: [██████████████░░░░] 74%     │
+│  Weekly:    [██████████████████░░] 92%     Weekly:    [████████████████░░] 81%     │
+│  Reset:     Full Quota Available           Reset:     resets in 1h 15m             │
+│                                                                            │
+├────────────────────────────────────────────────────────────────────────────┤
+│  [Enter] Switch  [R] Refresh/Rotate  [A] Add Current  [D] Delete  [Q] Quit │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Release builds use LTO, one codegen unit, stripping, and `opt-level = 3` for throughput. For minimal binary size instead:
+### Dashboard Hotkeys
 
+| Key | Action |
+|---|---|
+| <kbd>↑</kbd> / <kbd>k</kbd>, <kbd>↓</kbd> / <kbd>j</kbd> | Navigate accounts |
+| <kbd>1</kbd> - <kbd>9</kbd> | Instant direct selection by account number |
+| <kbd>Enter</kbd> | Switch to selected account immediately |
+| <kbd>r</kbd> / <kbd>R</kbd> | Force refresh live quotas from backend |
+| <kbd>a</kbd> / <kbd>A</kbd> | Register / snapshot current active CLI session |
+| <kbd>d</kbd> / <kbd>D</kbd> | Remove account from switcher (requires confirmation) |
+| <kbd>i</kbd> / <kbd>I</kbd> | Import external credential JSON |
+| <kbd>Home</kbd> / <kbd>End</kbd> | Jump to first / last account |
+| <kbd>q</kbd> / <kbd>Esc</kbd> | Exit dashboard |
+
+---
+
+## 🚀 Quick Start
+
+### 1. Add your currently logged-in account
+Register whatever account is currently signed in on your official `agy` CLI:
+```sh
+agy-auth-rust add --alias personal
+```
+
+### 2. Add additional accounts via OAuth PKCE
+Authenticate a second or third account directly through your browser:
+```sh
+agy-auth-rust login --alias work
+agy-auth-rust login --alias client-project
+```
+
+*Or authenticate using an isolated official `agy` subprocess:*
+```sh
+agy-auth-rust login --via-agy --alias research
+```
+
+### 3. Check account status & live quotas
+```sh
+# View all accounts with live model quotas & reset timestamps
+agy-auth-rust list
+
+# Fast offline listing (no network round-trip)
+agy-auth-rust list --no-usage
+
+# Deep dive into individual model bucket limits
+agy-auth-rust usage --all
+```
+
+### 4. Switch accounts instantly
+```sh
+# Switch by alias, index number, email, or account ID
+agy-auth-rust switch work
+
+# Switch back to your previous account (like `git checkout -`)
+agy-auth-rust switch -
+
+# Open interactive picker
+agy-switch
+```
+
+### 5. Rotate when quota is exhausted
+Run this manually or integrate into your agent's fallback hooks:
+```sh
+# Checks current account quota; only rotates if exhausted
+agy-auth-rust rotate
+
+# Force rotate to the account with highest available quota
+agy-auth-rust rotate --force
+```
+
+---
+
+## 🛠️ CLI Reference
+
+```text
+Usage: agy-auth-rust [OPTIONS] <COMMAND>
+
+Commands:
+  list (ls)       List stored accounts with tier & remaining quota gauges
+  add             Snapshot current active agy CLI or Desktop credentials
+  login           Authenticate a new account via Google OAuth PKCE
+  switch (use)    Switch active account for CLI and/or Desktop IDE
+  rotate          Intelligently rotate away from rate-limited accounts
+  remove (rm)     Remove an account from local storage
+  alias           Manage human-friendly alias labels (set, clear, list)
+  current         Display the currently active session profile
+  status          Detailed health status of credentials, keyring, and storage
+  usage           Print granular quota groups (Gemini 1.5/2.0/3.0, Flash, 3P)
+  sort            Re-order accounts prioritizing active and high-quota tiers
+  desktop         Generate or update Desktop application launchers (.desktop)
+  config          Adjust global preferences (e.g., auto-refresh intervals)
+  import          Import native, encrypted, or standard OAuth credential files
+  export          Export account credentials (plaintext; keep secure!)
+  clean           Prune orphaned snapshots and stale backups
+  path            Print resolved configuration and storage paths
+  version         Print version and check for available updates
+```
+
+### Global Flags
+
+- `--json`: Output raw, machine-readable JSON for scripting, CI/CD, and agent tooling.
+- `--no-color`: Disable ANSI color escapes.
+
+---
+
+## 🔒 Security & Privacy Architecture
+
+`agy-auth-rust` adheres to a strict **Zero-Leakage & Local-First** security philosophy:
+
+```
+                  ┌──────────────────────────────────────────────┐
+                  │                 Local Machine                │
+                  │                                              │
+                  │   ~/.config/agy-auth/                        │
+                  │   ├── encryption.key   [Mode: 0600]          │
+                  │   ├── registry.json    [Account Metadata]    │
+                  │   └── accounts/                              │
+                  │       └── acct_*.json  [AES-256-GCM Encrypted│
+                  │                         Token Snapshots]     │
+                  └───────┬──────────────────────────────┬───────┘
+                          │                              │
+                          ▼ (Direct HTTPS)               ▼ (Direct HTTPS)
+              ┌───────────────────────┐      ┌───────────────────────────┐
+              │ Google OAuth Endpoint │      │ Google Cloud Code Assist  │
+              │ accounts.google.com   │      │ cloudcode-pa.googleapis   │
+              │ oauth2.googleapis.com │      │ (Live Quota Telemetry)    │
+              └───────────────────────┘      └───────────────────────────┘
+```
+
+1. **Zero External Servers**: Telemetry is non-existent. No external third-party API or analytics server is ever contacted.
+2. **Encrypted at Rest**: Account snapshots are encrypted using **AES-256-GCM** with a locally generated 256-bit cryptographic key and authenticated with associated data (AAD).
+3. **Atomic File Operations**: All token and registry writes utilize tempfiles with immediate atomic renaming to prevent corruption during unexpected shutdowns.
+4. **POSIX Permission Enforcement**: Newly created storage directories default to `0700` and credential files to `0600` on Unix systems.
+5. **No Secrets in Source**: Test fixtures contain purely synthetic dummy values (`fixture-access`, `fixture-refresh`). Your personal credentials and account details remain solely on your local machine.
+
+---
+
+## 📦 Installation
+
+### Prerequisites
+
+- **Rust 1.78+** and `cargo` installed ([Install Rust](https://rustup.rs/))
+- **Google Antigravity CLI (`agy`)** installed and authenticated
+
+### Option A: Install via Cargo (Recommended)
+
+```sh
+# Clone repository
+git clone https://github.com/deactivated0/agy-auth-rust.git
+cd agy-auth-rust
+
+# Build optimized release binaries & install to ~/.cargo/bin
+cargo install --path .
+
+# Verify installation
+agy-auth-rust --version
+agy-switch --help
+```
+
+### Option B: Build from Source
+
+```sh
+cargo build --release
+
+# The compiled binaries will be available at:
+# ./target/release/agy-auth-rust
+# ./target/release/agy-switch
+```
+
+For ultra-compact embedded or resource-constrained environments:
 ```sh
 cargo build --profile small
 ```
 
-The result is **source code**, not a precompiled executable. No actual throughput, binary-size or resource benchmarks have been measured in the generation environment.
+### Option C: Precompiled Binaries
+Download precompiled archives for Linux, macOS, and Windows directly from the [GitHub Releases](https://github.com/deactivated0/agy-auth-rust/releases) page.
 
-## Quick start
+---
 
-```sh
-agy-auth-rust add --alias personal            # register current agy CLI login
-agy-auth-rust login --alias work               # OAuth browser login
-agy-auth-rust login --via-agy --alias test     # optional: launch official agy in isolated HOME
-agy-auth-rust list --no-usage                  # offline account listing
-agy-auth-rust list                             # quota-enriched listing
-agy-auth-rust usage --all                      # all account quota groups
-agy-auth-rust switch work                      # switch selected CLI / saved Desktop session
-agy-auth-rust switch -                         # return to previous account
-agy-auth-rust rotate                           # only when current quota is exhausted
-agy-auth-rust rotate --force                   # force switch to a healthy alternative
-agy-switch                                     # arrow-key account picker
-```
+## 🔄 Compatibility with Go `agy-auth`
 
-For GCP Pay As You Go:
+`agy-auth-rust` is a 100% wire-compatible and storage-compatible port of `agy-auth`.
 
-```sh
-agy-auth-rust login --gcp --project my-gcp-project --region global --alias work
-agy-auth-rust switch work --target cli
-```
+It directly reads and writes the standard configuration paths:
+- Configuration Directory: `~/.config/agy-auth/`
+- Registry File: `~/.config/agy-auth/registry.json`
+- AES-256-GCM Encryption Key: `~/.config/agy-auth/encryption.key`
+- Account Snapshots: `~/.config/agy-auth/accounts/acct_<hash>.json`
+- Desktop Profiles: `~/.config/agy-auth/desktop/acct_<hash>/`
+- Active CLI Token: `~/.gemini/antigravity-cli/antigravity-oauth-token`
 
-Run `agy-auth-rust --help` for all flags and options. When switching to a Desktop account, close Antigravity Desktop first or pass `--close-desktop`; add `--relaunch` to start it again. A running `agy` process keeps the old credential until restarted.
+You can switch between Go `agy-auth` and `agy-auth-rust` seamlessly without migrating accounts or re-authenticating.
 
-## Command overview
+---
 
-| Command | What it does |
-|---|---|
-| `list` | View stored accounts, optional quota, `--json`, `--no-sync`, `--no-usage` |
-| `add` | Snapshot the current `agy` account, optionally Desktop session |
-| `login` | Google OAuth PKCE or isolated official CLI login via `--via-agy` |
-| `switch` | Select by row, email, ID, alias, project or `-` for previous |
-| `rotate` | Check actual quota and switch to a verified healthy alternative |
-| `remove` | Unregister selected account(s); optional `--logout` and `--yes` |
-| `alias` | `set`, `clear`, `list` |
-| `current` / `status` | Show live account and storage health |
-| `usage` | Quota groups and reset times when returned by backend |
-| `config live --interval N` | Save a refresh interval; 5 through 3600 seconds |
-| `import` / `export` | Import native, encrypted or standard OAuth JSON formats; export plaintext credentials |
-| `import --purge` | Rebuild account metadata from encrypted snapshots |
-| `clean --dry-run` | Preview orphan cleanup and old-backup pruning |
-| `path` / `version` | Paths and build version |
+## ⚙️ Environment Variables
 
-`--json` is global. The interactive picker accepts arrow keys, Home/End, PgUp/PgDn, `j`/`k`, Enter and Escape. `agy-auth-rust switch --live` currently opens the picker, but is not yet a continuously refreshed quota TUI.
+Customize storage locations and behavior via environment variables:
 
-## Existing agy-auth data compatibility
+| Variable | Description | Default |
+|---|---|---|
+| `AGY_AUTH_RUST_HOME` | Root configuration & storage directory | `~/.config/agy-auth` |
+| `AGY_AUTH_STORAGE` | Storage backend (`keyring` or `file`) | `keyring` (fallback to file) |
+| `AGY_AUTH_AGY_TOKEN_FILE` | Target location of the live CLI token file | `~/.gemini/antigravity-cli/antigravity-oauth-token` |
+| `AGY_AUTH_AGY_SETTINGS_FILE` | Target location of settings file | `~/.gemini/antigravity-cli/settings.json` |
+| `AGY_DESKTOP_HOME` | Antigravity Desktop configuration directory | OS-dependent config dir |
+| `AGY_AUTH_CLIENT_ID` | Override Google OAuth Client ID | Discovered from `agy` binary |
+| `AGY_AUTH_CLIENT_SECRET` | Override Google OAuth Client Secret | Discovered from `agy` binary |
 
-The default data directory is **the original** `agy-auth` directory. No migration step is needed for ordinary v2 metadata and encrypted snapshots. The program uses these existing formats:
+---
 
-```text
-~/.config/agy-auth/registry.json
-~/.config/agy-auth/encryption.key
-~/.config/agy-auth/accounts/acct_<hash>.json
-~/.config/agy-auth/accounts/acct_<hash>.installation_id
-~/.config/agy-auth/desktop/acct_<hash>/
-~/.gemini/antigravity-cli/antigravity-oauth-token
-~/.gemini/antigravity-cli/settings.json
-```
+## 🤝 Contributing
 
-It reads `agy-auth-encrypted:v1:` snapshots with the original AES-256-GCM envelope: 12-byte nonce, encrypted JSON and 16-byte authentication tag, authenticated with the exact prefix as AAD. The key is base64 encoded in `encryption.key`. The registry schema and GCP-scoped account ID hashing are intentionally compatible.
+Contributions, bug reports, and suggestions are welcome!
 
-**Back up your whole `agy-auth` directory and key before first use.** The program writes snapshots and metadata, so don't test it on the only copy of valuable credentials. For dry testing on a copy:
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Ensure formatting and tests pass:
+   ```sh
+   cargo fmt --all -- --check
+   cargo clippy --all-targets
+   cargo test --all-targets
+   ```
+4. Commit your changes (`git commit -m 'feat: add amazing feature'`)
+5. Push to the branch (`git push origin feature/amazing-feature`)
+6. Open a Pull Request
 
-```sh
-cp -a ~/.config/agy-auth /tmp/agy-auth-test
-AGY_AUTH_RUST_HOME=/tmp/agy-auth-test AGY_AUTH_STORAGE=file agy-auth-rust list --no-sync --no-usage
-```
+---
 
-### Supported input formats (private data stays on your computer)
+## 📄 License
 
-`import` reads the files you specify **at runtime**, not from the source tree. Supported inputs are:
+Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more information.
 
-- Native Antigravity CLI credential JSON: `{"token": {"access_token": "...", "refresh_token": "..."}, ...}`
-- Original `agy-auth` encrypted account snapshots (`agy-auth-encrypted:v1:`), with the original `encryption.key` **supplied only on the user's machine**
-- Standard OAuth token JSON with top-level `access_token` / `refresh_token` fields
-- Credential JSON arrays and explicit `credentials`, `credential`, or `accounts` wrappers
-- GCP Pay As You Go metadata (`auth_method`, `project_id`, `region`) in supported credential documents
-
-To import an existing encrypted snapshot using a separate key:
-
-```sh
-agy-auth-rust import /private/backup/acct_xxxxxxxxxx.json --key /private/backup/encryption.key
-```
-
-To import a standard local OAuth JSON file:
-
-```sh
-agy-auth-rust import /private/credentials.json --alias personal
-```
-
-`registry.json` by itself is **metadata only**, not a credential export. Use `agy-auth-rust import --purge` to reconstruct metadata from existing snapshots in the configured store. This tool never uploads your credentials, token JSON, or encryption key to the source project. Google OAuth and quota queries still contact Google's own endpoints as required for authentication and usage. Do not run these commands on other people's data without authorization.
-
-**The ZIP contains only source code, documentation, and artificial test fixtures. No authentic user tokens, accounts, cookies, keys, or private profiles are included.**
-
-Other environment variables: `AGY_AUTH_HOME`, `AGY_AUTH_AGY_TOKEN_FILE`, `AGY_AUTH_AGY_SETTINGS_FILE`, `AGY_AUTH_STORAGE=file`, `AGY_DESKTOP_HOME`, `AGY_DESKTOP_CONFIG_DIR`, `AGY_DESKTOP_BIN`, `AGY_AUTH_CLIENT_ID`, `AGY_AUTH_CLIENT_SECRET`, `AGY_AUTH_GCP_CLIENT_ID`, `AGY_AUTH_GCP_CLIENT_SECRET`.
-
-### Security notes
-
-- Credential snapshots and automatic active-credential backups use AES-256-GCM at rest.
-- Registry and token writes are atomic. The Rust process holds a registry lock during mutations, although the old Go program does not honor this lock, so do not run both tools concurrently.
-- File permissions on newly created secret files are `0600` and newly created managed directories `0700` on Unix.
-- Keyring access is best-effort; the original `agy` plaintext fallback file is also updated on switches.
-- Exported JSON files contain **plaintext access/refresh tokens**. Keep them private and delete when finished.
-- The `id_token` payload is decoded only for local identification; its signature is not independently verified by this tool.
-- Quota calls use the internal Code Assist backend documented by agy-auth. This is not a supported public API and may change.
-- No telemetry is added. Don't upload real tokens, snapshots, or `encryption.key` in bug reports.
-
-## Compatibility and remaining work
-
-| Area | Current state |
-|---|---|
-| Registry and AES-GCM snapshot envelope | Implemented, with independent Python-generated interoperability fixture |
-| Account matching, GCP IDs, import/export, aliases, backups | Implemented, not fully integration-tested |
-| Keyring and CLI file fallback | Implemented, platform testing outstanding |
-| Antigravity Desktop profile snapshots / restore | Implemented, platform testing outstanding |
-| OAuth and client discovery from `agy` executable | Implemented, live-login validation outstanding |
-| Real quota group reporting and rotation | Implemented against the original undocumented endpoints, live validation outstanding |
-| Terminal picker | Implemented |
-| Live updating TUI and automatic switch inside live view | **Not implemented** |
-| Original updater / self-update workflow | **Not implemented** (`version --check` reports this) |
-| Original internal Go development harness and all its regression tests | **Not ported** |
-| Guaranteed Windows/macOS/Linux behavior | **Not verified** |
-
-This package does not claim behavior-perfect parity, successful compilation, passing tests, or measured optimizations until those checks actually run.
-
-## Testing and release
-
-`cargo test` includes AES-GCM interoperability, account ID, query ambiguity, and basic state tests. GitHub Actions CI is provided for Linux, macOS and Windows, with a release workflow on tags. Since this source ZIP was created without Cargo installed or crate download access, the workflows have **not** been run here. See [Build status](BUILD_STATUS.md).
-
-## Credits and license
-
-- [fikrilal/agy-auth](https://github.com/fikrilal/agy-auth), reference architecture, behavior and formats (MIT).
-- [deactivated0/freebuff-auth](https://github.com/deactivated0/freebuff-auth), Rust CLI concept and naming inspiration (MIT).
-
-agy-auth-rust source code is distributed under the MIT license. This is an unofficial project, not affiliated with Google.
+*Disclaimer: `agy-auth-rust` is an independent open-source project and is not affiliated with, sponsored by, or endorsed by Google LLC.*

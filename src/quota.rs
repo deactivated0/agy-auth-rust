@@ -1,3 +1,8 @@
+use crate::{
+    model::{Account, Credential},
+    oauth,
+    store::Store,
+};
 use anyhow::{anyhow, bail, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -7,11 +12,6 @@ use std::{
     sync::{mpsc, Arc, Mutex},
     thread,
     time::Duration,
-};
-use crate::{
-    model::{Account, Credential},
-    oauth,
-    store::Store,
 };
 
 const API: &str = "https://cloudcode-pa.googleapis.com/v1internal";
@@ -181,8 +181,7 @@ fn lower(target: &mut Option<Bucket>, candidate: &Bucket) {
         None => true,
         Some(current) => {
             candidate.remaining_percent < current.remaining_percent
-                || ((candidate.remaining_percent - current.remaining_percent).abs()
-                    < f64::EPSILON
+                || ((candidate.remaining_percent - current.remaining_percent).abs() < f64::EPSILON
                     && candidate.reset_time.is_some()
                     && (current.reset_time.is_none() || candidate.reset_time < current.reset_time))
         }
@@ -203,7 +202,9 @@ fn parse_groups(summary: &Value) -> Vec<Group> {
             };
             if let Some(buckets) = g["buckets"].as_array() {
                 for b in buckets {
-                    let Some(f) = b["remainingFraction"].as_f64() else { continue };
+                    let Some(f) = b["remainingFraction"].as_f64() else {
+                        continue;
+                    };
                     if !f.is_finite() {
                         continue;
                     }
@@ -237,16 +238,23 @@ fn merge_groups(daily: Vec<Group>, prod: Vec<Group>) -> Vec<Group> {
     let mut merged = daily;
 
     for pg in prod {
-        let matching = merged.iter_mut().find(|g| g.name.eq_ignore_ascii_case(&pg.name));
+        let matching = merged
+            .iter_mut()
+            .find(|g| g.name.eq_ignore_ascii_case(&pg.name));
         if let Some(mg) = matching {
             if mg.description.is_empty() && !pg.description.is_empty() {
                 mg.description = pg.description.clone();
             }
             for pb in pg.buckets {
-                if let Some(mb) = mg.buckets.iter_mut().find(|b| b.id.eq_ignore_ascii_case(&pb.id) || b.window.eq_ignore_ascii_case(&pb.window)) {
+                if let Some(mb) = mg.buckets.iter_mut().find(|b| {
+                    b.id.eq_ignore_ascii_case(&pb.id) || b.window.eq_ignore_ascii_case(&pb.window)
+                }) {
                     if pb.remaining_percent < mb.remaining_percent {
                         *mb = pb;
-                    } else if (pb.remaining_percent - mb.remaining_percent).abs() < f64::EPSILON && pb.reset_time.is_some() && mb.reset_time.is_none() {
+                    } else if (pb.remaining_percent - mb.remaining_percent).abs() < f64::EPSILON
+                        && pb.reset_time.is_some()
+                        && mb.reset_time.is_none()
+                    {
                         mb.reset_time = pb.reset_time;
                     }
                 } else {
@@ -308,10 +316,22 @@ pub fn fetch(c: &Credential) -> Result<Usage> {
     let quota_payload = json!({"project": assist_project});
 
     // Query daily backend first (tracks live Antigravity Gemini model usage)
-    let daily_res = post(&ag, DAILY_API, "retrieveUserQuotaSummary", &access, &quota_payload);
+    let daily_res = post(
+        &ag,
+        DAILY_API,
+        "retrieveUserQuotaSummary",
+        &access,
+        &quota_payload,
+    );
 
     // Query prod backend (tracks standard/prod/3P usage, and fallback for free tier)
-    let prod_res = post(&ag, API, "retrieveUserQuotaSummary", &access, &quota_payload);
+    let prod_res = post(
+        &ag,
+        API,
+        "retrieveUserQuotaSummary",
+        &access,
+        &quota_payload,
+    );
 
     let daily_groups = daily_res.ok().map(|s| parse_groups(&s)).unwrap_or_default();
     let prod_groups = prod_res.ok().map(|s| parse_groups(&s)).unwrap_or_default();

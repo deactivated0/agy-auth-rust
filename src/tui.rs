@@ -1,3 +1,9 @@
+use crate::{
+    app::{activate, import_one, GcpFlags, Target},
+    model::{Account, Registry},
+    oauth, quota,
+    store::Store,
+};
 use anyhow::{bail, Result};
 use crossterm::{
     cursor,
@@ -13,12 +19,6 @@ use std::{
     path::Path,
     time::Duration,
 };
-use crate::{
-    app::{activate, import_one, GcpFlags, Target},
-    model::{Account, Registry},
-    oauth, quota,
-    store::Store,
-};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
@@ -28,35 +28,127 @@ pub enum Mode {
 }
 
 // Vibrant Cyber/Neon color palette
-pub const C_BANNER_1: Color = Color::Rgb { r: 244, g: 63, b: 142 };  // Rose / Magenta
-pub const C_BANNER_2: Color = Color::Rgb { r: 168, g: 85, b: 247 };  // Electric Purple
-pub const C_BANNER_3: Color = Color::Rgb { r: 99, g: 102, b: 241 };  // Indigo
-pub const C_BANNER_4: Color = Color::Rgb { r: 59, g: 130, b: 246 };  // Sky Blue
-pub const C_BANNER_5: Color = Color::Rgb { r: 6, g: 182, b: 212 };   // Bright Cyan
-pub const C_BANNER_6: Color = Color::Rgb { r: 16, g: 185, b: 129 };  // Emerald Green
+pub const C_BANNER_1: Color = Color::Rgb {
+    r: 244,
+    g: 63,
+    b: 142,
+}; // Rose / Magenta
+pub const C_BANNER_2: Color = Color::Rgb {
+    r: 168,
+    g: 85,
+    b: 247,
+}; // Electric Purple
+pub const C_BANNER_3: Color = Color::Rgb {
+    r: 99,
+    g: 102,
+    b: 241,
+}; // Indigo
+pub const C_BANNER_4: Color = Color::Rgb {
+    r: 59,
+    g: 130,
+    b: 246,
+}; // Sky Blue
+pub const C_BANNER_5: Color = Color::Rgb {
+    r: 6,
+    g: 182,
+    b: 212,
+}; // Bright Cyan
+pub const C_BANNER_6: Color = Color::Rgb {
+    r: 16,
+    g: 185,
+    b: 129,
+}; // Emerald Green
 
-pub const C_BORDER: Color = Color::Rgb { r: 0, g: 220, b: 255 };     // Vibrant Neon Cyan
-pub const C_BORDER_DIM: Color = Color::Rgb { r: 20, g: 110, b: 170 };// Muted Cyan Divider
-pub const C_TITLE: Color = Color::Rgb { r: 251, g: 191, b: 36 };     // Glowing Amber / Gold
+pub const C_BORDER: Color = Color::Rgb {
+    r: 0,
+    g: 220,
+    b: 255,
+}; // Vibrant Neon Cyan
+pub const C_BORDER_DIM: Color = Color::Rgb {
+    r: 20,
+    g: 110,
+    b: 170,
+}; // Muted Cyan Divider
+pub const C_TITLE: Color = Color::Rgb {
+    r: 251,
+    g: 191,
+    b: 36,
+}; // Glowing Amber / Gold
 
-pub const C_ACC_COUNT: Color = Color::Rgb { r: 56, g: 189, b: 248 }; // Neon Cyan
-pub const C_ACT_COUNT: Color = Color::Rgb { r: 52, g: 211, b: 153 }; // Neon Emerald
-pub const C_INA_COUNT: Color = Color::Rgb { r: 251, g: 113, b: 133 }; // Coral Pink
+pub const C_ACC_COUNT: Color = Color::Rgb {
+    r: 56,
+    g: 189,
+    b: 248,
+}; // Neon Cyan
+pub const C_ACT_COUNT: Color = Color::Rgb {
+    r: 52,
+    g: 211,
+    b: 153,
+}; // Neon Emerald
+pub const C_INA_COUNT: Color = Color::Rgb {
+    r: 251,
+    g: 113,
+    b: 133,
+}; // Coral Pink
 
-pub const C_ACTIVE_DOT: Color = Color::Rgb { r: 74, g: 222, b: 128 }; // Glowing Spring Green
-pub const C_IDLE_DOT: Color = Color::Rgb { r: 148, g: 163, b: 184 };  // Slate Gray
+pub const C_ACTIVE_DOT: Color = Color::Rgb {
+    r: 74,
+    g: 222,
+    b: 128,
+}; // Glowing Spring Green
+pub const C_IDLE_DOT: Color = Color::Rgb {
+    r: 148,
+    g: 163,
+    b: 184,
+}; // Slate Gray
 
-pub const C_SEL_BG: Color = Color::Rgb { r: 35, g: 45, b: 75 };       // Midnight Cyber Navy
-pub const C_SEL_ID: Color = Color::Rgb { r: 253, g: 224, b: 71 };     // Bright Gold
-pub const C_TEXT: Color = Color::Rgb { r: 241, g: 245, b: 249 };       // Crisp White
-pub const C_MUTED: Color = Color::Rgb { r: 148, g: 163, b: 184 };      // Slate Muted
-pub const C_DARK: Color = Color::Rgb { r: 71, g: 85, b: 105 };         // Divider Slate
+pub const C_SEL_BG: Color = Color::Rgb {
+    r: 35,
+    g: 45,
+    b: 75,
+}; // Midnight Cyber Navy
+pub const C_SEL_ID: Color = Color::Rgb {
+    r: 253,
+    g: 224,
+    b: 71,
+}; // Bright Gold
+pub const C_TEXT: Color = Color::Rgb {
+    r: 241,
+    g: 245,
+    b: 249,
+}; // Crisp White
+pub const C_MUTED: Color = Color::Rgb {
+    r: 148,
+    g: 163,
+    b: 184,
+}; // Slate Muted
+pub const C_DARK: Color = Color::Rgb {
+    r: 71,
+    g: 85,
+    b: 105,
+}; // Divider Slate
 
-pub const C_PROF_DEF: Color = Color::Rgb { r: 56, g: 189, b: 248 };   // Cyan DEFAULT
-pub const C_PROF_ISO: Color = Color::Rgb { r: 192, g: 132, b: 252 };  // Lavender ISOLATED
+pub const C_PROF_DEF: Color = Color::Rgb {
+    r: 56,
+    g: 189,
+    b: 248,
+}; // Cyan DEFAULT
+pub const C_PROF_ISO: Color = Color::Rgb {
+    r: 192,
+    g: 132,
+    b: 252,
+}; // Lavender ISOLATED
 
-pub const C_KEY: Color = Color::Rgb { r: 250, g: 204, b: 21 };         // Amber/Gold Keys
-pub const C_PROMPT: Color = Color::Rgb { r: 74, g: 222, b: 128 };      // Emerald Prompt
+pub const C_KEY: Color = Color::Rgb {
+    r: 250,
+    g: 204,
+    b: 21,
+}; // Amber/Gold Keys
+pub const C_PROMPT: Color = Color::Rgb {
+    r: 74,
+    g: 222,
+    b: 128,
+}; // Emerald Prompt
 
 // Aliases for legacy compatibility
 pub const C_CYAN: Color = C_BORDER;
@@ -108,7 +200,9 @@ pub fn interact(accounts: &[Account], active: &str, mode: Mode) -> Result<Vec<us
         }
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => return Ok(vec![]),
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => return Ok(vec![]),
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                return Ok(vec![])
+            }
             KeyCode::Up | KeyCode::Char('k') => {
                 selected = selected.saturating_sub(1);
             }
@@ -176,7 +270,10 @@ fn paint_legacy(
         Mode::Switch => "Select account",
         Mode::Remove => "Select accounts to remove",
     };
-    execute!(out, Print(format!("| {title} | {} stored\r\n\r\n", accounts.len())))?;
+    execute!(
+        out,
+        Print(format!("| {title} | {} stored\r\n\r\n", accounts.len()))
+    )?;
     for (i, a) in accounts.iter().enumerate().skip(offset).take(visible) {
         let indicator = if i == selected { '>' } else { ' ' };
         let active_sign = if a.id == active { '*' } else { ' ' };
@@ -309,7 +406,11 @@ pub fn dashboard(
         bail!("interactive terminal required for switcher dashboard");
     }
     let _guard = TerminalGuard::enter()?;
-    let mut selected = reg.accounts.iter().position(|a| a.id == reg.active).unwrap_or(0);
+    let mut selected = reg
+        .accounts
+        .iter()
+        .position(|a| a.id == reg.active)
+        .unwrap_or(0);
     let mut offset = 0usize;
     let mut input_buf = String::new();
     let mut status_msg = "Select account or enter command".to_string();
@@ -375,7 +476,9 @@ pub fn dashboard(
         } else if height < 34 {
             3.min(reg.accounts.len())
         } else if height >= 46 {
-            (height.saturating_sub(38)).clamp(4, 10).min(reg.accounts.len())
+            (height.saturating_sub(38))
+                .clamp(4, 10)
+                .min(reg.accounts.len())
         } else {
             4.min(reg.accounts.len())
         };
@@ -388,9 +491,28 @@ pub fn dashboard(
         }
 
         let lines = if horizontal {
-            build_horizontal_lines(reg, selected, offset, vault_visible, &input_buf, &status_msg, &state, &pad, height)
+            build_horizontal_lines(
+                reg,
+                selected,
+                offset,
+                vault_visible,
+                &input_buf,
+                &status_msg,
+                &state,
+                &pad,
+                height,
+            )
         } else {
-            build_compact_lines(reg, selected, offset, vault_visible, &input_buf, &status_msg, &state, &pad)
+            build_compact_lines(
+                reg,
+                selected,
+                offset,
+                vault_visible,
+                &input_buf,
+                &status_msg,
+                &state,
+                &pad,
+            )
         };
 
         render_frame(&lines, height, width)?;
@@ -448,9 +570,28 @@ pub fn dashboard(
                 KeyCode::Char('l') | KeyCode::Char('L') => {
                     status_msg = "Opening browser for Google OAuth login...".to_string();
                     let lines = if horizontal {
-                        build_horizontal_lines(reg, selected, offset, vault_visible, &input_buf, &status_msg, &state, &pad, height)
+                        build_horizontal_lines(
+                            reg,
+                            selected,
+                            offset,
+                            vault_visible,
+                            &input_buf,
+                            &status_msg,
+                            &state,
+                            &pad,
+                            height,
+                        )
                     } else {
-                        build_compact_lines(reg, selected, offset, vault_visible, &input_buf, &status_msg, &state, &pad)
+                        build_compact_lines(
+                            reg,
+                            selected,
+                            offset,
+                            vault_visible,
+                            &input_buf,
+                            &status_msg,
+                            &state,
+                            &pad,
+                        )
                     };
                     let _ = render_frame(&lines, height, width);
                     match oauth::login(false, "", false) {
@@ -481,7 +622,14 @@ pub fn dashboard(
                         status_msg = "Import canceled (empty path).".to_string();
                     } else {
                         let path = Path::new(&path_str);
-                        match import_one(store, reg, path, "", &GcpFlags::default(), &store.paths.key()) {
+                        match import_one(
+                            store,
+                            reg,
+                            path,
+                            "",
+                            &GcpFlags::default(),
+                            &store.paths.key(),
+                        ) {
                             Ok(ids) => {
                                 let _ = reg.normalize();
                                 let _ = store.save(reg);
@@ -510,7 +658,9 @@ pub fn dashboard(
             },
             InputState::Normal => match key.code {
                 KeyCode::Char('q') | KeyCode::Esc => return Ok(None),
-                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => return Ok(None),
+                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    return Ok(None)
+                }
                 KeyCode::Up | KeyCode::Char('k') => {
                     selected = selected.saturating_sub(1);
                     input_buf.clear();
@@ -529,7 +679,8 @@ pub fn dashboard(
                 }
                 KeyCode::Char('a') | KeyCode::Char('A') => {
                     state = InputState::PromptAdd;
-                    status_msg = "Add current CLI login? [y/N] (or 'l' for OAuth browser login):".to_string();
+                    status_msg = "Add current CLI login? [y/N] (or 'l' for OAuth browser login):"
+                        .to_string();
                     input_buf.clear();
                 }
                 KeyCode::Char('d') | KeyCode::Char('D') => {
@@ -541,9 +692,28 @@ pub fn dashboard(
                 KeyCode::Char('r') | KeyCode::Char('R') => {
                     status_msg = "Fetching quotas from Code Assist API...".to_string();
                     let lines = if horizontal {
-                        build_horizontal_lines(reg, selected, offset, vault_visible, &input_buf, &status_msg, &state, &pad, height)
+                        build_horizontal_lines(
+                            reg,
+                            selected,
+                            offset,
+                            vault_visible,
+                            &input_buf,
+                            &status_msg,
+                            &state,
+                            &pad,
+                            height,
+                        )
                     } else {
-                        build_compact_lines(reg, selected, offset, vault_visible, &input_buf, &status_msg, &state, &pad)
+                        build_compact_lines(
+                            reg,
+                            selected,
+                            offset,
+                            vault_visible,
+                            &input_buf,
+                            &status_msg,
+                            &state,
+                            &pad,
+                        )
                     };
                     render_frame(&lines, height, width)?;
                     let usage = quota::fetch_all(store, &reg.accounts);
@@ -554,14 +724,17 @@ pub fn dashboard(
                             }
                             a.quota_5h = u.five_hour.as_ref().map(|b| b.remaining_percent);
                             a.quota_weekly = u.weekly.as_ref().map(|b| b.remaining_percent);
-                            a.quota_reset_5h = u.five_hour.as_ref().and_then(|b| b.reset_time.clone());
-                            a.quota_reset_weekly = u.weekly.as_ref().and_then(|b| b.reset_time.clone());
+                            a.quota_reset_5h =
+                                u.five_hour.as_ref().and_then(|b| b.reset_time.clone());
+                            a.quota_reset_weekly =
+                                u.weekly.as_ref().and_then(|b| b.reset_time.clone());
                             a.quota_group_desc = u.gemini_group().map(|g| g.description.clone());
                         }
                     }
                     let _ = reg.normalize();
                     let _ = store.save(reg);
-                    status_msg = "Quotas refreshed and premium accounts resorted to top.".to_string();
+                    status_msg =
+                        "Quotas refreshed and premium accounts resorted to top.".to_string();
                 }
                 KeyCode::Char('i') | KeyCode::Char('I') => {
                     state = InputState::PromptImport;
@@ -573,9 +746,12 @@ pub fn dashboard(
                     if let Ok(num) = input_buf.parse::<usize>() {
                         if num >= 1 && num <= reg.accounts.len() {
                             selected = num - 1;
-                            status_msg = format!("Selected #{num}. Press Enter to switch, or Backspace to clear.");
+                            status_msg = format!(
+                                "Selected #{num}. Press Enter to switch, or Backspace to clear."
+                            );
                         } else {
-                            status_msg = format!("Row #{num} out of range (1-{})", reg.accounts.len());
+                            status_msg =
+                                format!("Row #{num} out of range (1-{})", reg.accounts.len());
                         }
                     }
                 }
@@ -602,7 +778,8 @@ pub fn dashboard(
                     let name = target_account.display();
 
                     drop(_guard);
-                    let messages = activate(store, reg, &target_id, target, close_desktop, relaunch)?;
+                    let messages =
+                        activate(store, reg, &target_id, target, close_desktop, relaunch)?;
                     println!("Switched to {name}. Restart running agy sessions.");
                     for msg in messages {
                         eprintln!("warning: {msg}");
@@ -620,7 +797,11 @@ fn render_frame(lines: &[Line], term_h: usize, _term_w: usize) -> Result<()> {
     execute!(out, cursor::MoveTo(0, 0))?;
     let render_rows = lines.len().min(term_h);
     for (row_idx, line) in lines.iter().take(render_rows).enumerate() {
-        execute!(out, cursor::MoveTo(0, row_idx as u16), terminal::Clear(ClearType::CurrentLine))?;
+        execute!(
+            out,
+            cursor::MoveTo(0, row_idx as u16),
+            terminal::Clear(ClearType::CurrentLine)
+        )?;
         for span in line {
             if span.bg != Color::Reset {
                 execute!(out, SetBackgroundColor(span.bg))?;
@@ -633,12 +814,17 @@ fn render_frame(lines: &[Line], term_h: usize, _term_w: usize) -> Result<()> {
     }
     // Clear leftover lines below rendered frame
     for r in render_rows..term_h {
-        execute!(out, cursor::MoveTo(0, r as u16), terminal::Clear(ClearType::CurrentLine))?;
+        execute!(
+            out,
+            cursor::MoveTo(0, r as u16),
+            terminal::Clear(ClearType::CurrentLine)
+        )?;
     }
     out.flush()?;
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_horizontal_lines(
     reg: &Registry,
     selected: usize,
@@ -651,8 +837,21 @@ fn build_horizontal_lines(
     height: usize,
 ) -> Vec<Line> {
     let total_count = reg.accounts.len();
-    let active_count = if reg.accounts.iter().any(|a| a.id == reg.active) { 1 } else { 0 };
-    let pro_count = reg.accounts.iter().filter(|a| matches!(a.plan.as_deref(), Some("Pro") | Some("Google AI Plus") | Some("Ultra"))).count();
+    let active_count = if reg.accounts.iter().any(|a| a.id == reg.active) {
+        1
+    } else {
+        0
+    };
+    let pro_count = reg
+        .accounts
+        .iter()
+        .filter(|a| {
+            matches!(
+                a.plan.as_deref(),
+                Some("Pro") | Some("Google AI Plus") | Some("Ultra")
+            )
+        })
+        .count();
     let free_count = total_count.saturating_sub(pro_count);
 
     let mut lines = Vec::with_capacity(30);
@@ -661,7 +860,10 @@ fn build_horizontal_lines(
     if height >= 28 {
         lines.push(vec![
             span(pad, Color::Reset),
-            span("   █████╗  ██████╗ ██╗   ██╗      █████╗ ██╗   ██╗████████╗██╗  ██╗", C_BANNER_2),
+            span(
+                "   █████╗  ██████╗ ██╗   ██╗      █████╗ ██╗   ██╗████████╗██╗  ██╗",
+                C_BANNER_2,
+            ),
             span("    │  ", C_BORDER_DIM),
             span("A G Y  A U T H  /  R U S T", C_TEXT),
             span("   ", Color::Reset),
@@ -670,15 +872,24 @@ fn build_horizontal_lines(
         ]);
         lines.push(vec![
             span(pad, Color::Reset),
-            span("  ██╔══██╗██╔════╝ ╚██╗ ██╔╝     ██╔══██╗██║   ██║╚══██╔══╝██║  ██║", C_BANNER_4),
+            span(
+                "  ██╔══██╗██╔════╝ ╚██╗ ██╔╝     ██╔══██╗██║   ██║╚══██╔══╝██║  ██║",
+                C_BANNER_4,
+            ),
             span("    │  ", C_BORDER_DIM),
             span("MULTI-ACCOUNT CONTROL", C_MUTED),
             span("      ", Color::Reset),
-            span(format!("ACTIVE: {:02} / {:02}", selected + 1, total_count), C_TITLE),
+            span(
+                format!("ACTIVE: {:02} / {:02}", selected + 1, total_count),
+                C_TITLE,
+            ),
         ]);
         lines.push(vec![
             span(pad, Color::Reset),
-            span("  ╚═╝  ╚═╝ ╚═════╝    ╚═╝        ╚═╝  ╚═╝ ╚═════╝    ╚═╝   ╚═╝  ╚═╝", C_BANNER_6),
+            span(
+                "  ╚═╝  ╚═╝ ╚═════╝    ╚═╝        ╚═╝  ╚═╝ ╚═════╝    ╚═╝   ╚═╝  ╚═╝",
+                C_BANNER_6,
+            ),
             span("    │  ", C_BORDER_DIM),
             span("━".repeat(45), C_BORDER_DIM),
         ]);
@@ -738,12 +949,18 @@ fn build_horizontal_lines(
     ]);
     left_box_lines.push(vec![
         span("│", C_BORDER),
-        span("  ID STATUS   ACCOUNT / ALIAS          PLAN    5-H   WEEK", C_TITLE),
+        span(
+            "  ID STATUS   ACCOUNT / ALIAS          PLAN    5-H   WEEK",
+            C_TITLE,
+        ),
         span("│", C_BORDER),
     ]);
     left_box_lines.push(vec![
         span("│", C_BORDER),
-        span("  ── ───────  ──────────────────────── ─────── ───── ────", C_DARK),
+        span(
+            "  ── ───────  ──────────────────────── ─────── ───── ────",
+            C_DARK,
+        ),
         span("│", C_BORDER),
     ]);
 
@@ -774,23 +991,42 @@ fn build_horizontal_lines(
                 Some("Ultra") => "Ultra  ",
                 _ => "Free   ",
             };
-            let plan_col = if plan_label.starts_with("Pro") || plan_label.starts_with("AI") || plan_label.starts_with("Ultra") {
+            let plan_col = if plan_label.starts_with("Pro")
+                || plan_label.starts_with("AI")
+                || plan_label.starts_with("Ultra")
+            {
                 C_ACT_COUNT
             } else {
                 C_MUTED
             };
 
-            let is_pro = matches!(acc.plan.as_deref(), Some("Pro") | Some("Google AI Plus") | Some("Ultra"));
+            let is_pro = matches!(
+                acc.plan.as_deref(),
+                Some("Pro") | Some("Google AI Plus") | Some("Ultra")
+            );
             let h5_str = if is_pro {
-                acc.quota_5h.map(|p| {
-                    if p >= 99.95 { " 100%".into() } else { format!("{:>4.1}%", p) }
-                }).unwrap_or_else(|| " 100%".into())
+                acc.quota_5h
+                    .map(|p| {
+                        if p >= 99.95 {
+                            " 100%".into()
+                        } else {
+                            format!("{:>4.1}%", p)
+                        }
+                    })
+                    .unwrap_or_else(|| " 100%".into())
             } else {
                 "  -- ".into()
             };
-            let wk_str = acc.quota_weekly.map(|p| {
-                if p >= 99.95 { "100%".into() } else { format!("{:>3.0}%", p) }
-            }).unwrap_or_else(|| "100%".into());
+            let wk_str = acc
+                .quota_weekly
+                .map(|p| {
+                    if p >= 99.95 {
+                        "100%".into()
+                    } else {
+                        format!("{:>3.0}%", p)
+                    }
+                })
+                .unwrap_or_else(|| "100%".into());
 
             let row_bg = if is_selected { C_SEL_BG } else { Color::Reset };
             let text_col = C_TEXT;
@@ -798,17 +1034,33 @@ fn build_horizontal_lines(
             left_box_lines.push(vec![
                 span("│", C_BORDER),
                 span_bg("  ", text_col, row_bg),
-                span_bg(id_str, if is_selected { C_SEL_ID } else { C_ACC_COUNT }, row_bg),
+                span_bg(
+                    id_str,
+                    if is_selected { C_SEL_ID } else { C_ACC_COUNT },
+                    row_bg,
+                ),
                 span_bg(" ", text_col, row_bg),
                 span_bg(dot, st_col, row_bg),
                 span_bg(" ", text_col, row_bg),
                 span_bg(st_txt, st_col, row_bg),
                 span_bg(" ", text_col, row_bg),
-                span_bg(name_padded, if !acc.alias.is_empty() { C_TITLE } else { text_col }, row_bg),
+                span_bg(
+                    name_padded,
+                    if !acc.alias.is_empty() {
+                        C_TITLE
+                    } else {
+                        text_col
+                    },
+                    row_bg,
+                ),
                 span_bg(" ", text_col, row_bg),
                 span_bg(plan_label, plan_col, row_bg),
                 span_bg(" ", text_col, row_bg),
-                span_bg(format!("{:>5}", h5_str), if is_pro { C_ACT_COUNT } else { C_DARK }, row_bg),
+                span_bg(
+                    format!("{:>5}", h5_str),
+                    if is_pro { C_ACT_COUNT } else { C_DARK },
+                    row_bg,
+                ),
                 span_bg(" ", text_col, row_bg),
                 span_bg(format!("{:>4}", wk_str), C_TEXT, row_bg),
                 span("│", C_BORDER),
@@ -832,7 +1084,10 @@ fn build_horizontal_lines(
         span("  ● ACTIVE: ", C_ACT_COUNT),
         span(format!("{:02}", active_count), C_TEXT),
         span("   ○ IDLE: ", C_MUTED),
-        span(format!("{:02}", total_count.saturating_sub(active_count)), C_TEXT),
+        span(
+            format!("{:02}", total_count.saturating_sub(active_count)),
+            C_TEXT,
+        ),
         span("   PRO: ", C_ACT_COUNT),
         span(format!("{:02}", pro_count), C_TEXT),
         span("   FREE: ", C_INA_COUNT),
@@ -843,7 +1098,10 @@ fn build_horizontal_lines(
     // Right Panel: SELECTED ACCOUNT & LIVE USAGE (width 62, inner 60)
     let cur_acc = &reg.accounts[selected];
     let is_cur_active = cur_acc.id == reg.active;
-    let is_cur_pro = matches!(cur_acc.plan.as_deref(), Some("Pro") | Some("Google AI Plus") | Some("Ultra"));
+    let is_cur_pro = matches!(
+        cur_acc.plan.as_deref(),
+        Some("Pro") | Some("Google AI Plus") | Some("Ultra")
+    );
 
     let r_badge = format!("[ {:02} / {:02} ]", selected + 1, total_count);
     let r_prefix = "╭─ SELECTED ACCOUNT & USAGE ";
@@ -866,13 +1124,35 @@ fn build_horizontal_lines(
     ]);
 
     // Row 2: Status & Profile
-    let prof_display = if cur_acc.id == reg.active || cur_acc.has_desktop { "DEFAULT" } else { "ISOLATED" };
+    let prof_display = if cur_acc.id == reg.active || cur_acc.has_desktop {
+        "DEFAULT"
+    } else {
+        "ISOLATED"
+    };
     right_box_lines.push(vec![
         span("│", C_BORDER),
         span("  STATUS:  ", C_TITLE),
-        span(if is_cur_active { "● ACTIVE (Current)" } else { "○ IDLE            " }, if is_cur_active { C_ACTIVE_DOT } else { C_IDLE_DOT }),
+        span(
+            if is_cur_active {
+                "● ACTIVE (Current)"
+            } else {
+                "○ IDLE            "
+            },
+            if is_cur_active {
+                C_ACTIVE_DOT
+            } else {
+                C_IDLE_DOT
+            },
+        ),
         span("     PROFILE: ", C_TITLE),
-        span(format!("{:<13}", prof_display), if cur_acc.id == reg.active || cur_acc.has_desktop { C_PROF_DEF } else { C_PROF_ISO }),
+        span(
+            format!("{:<13}", prof_display),
+            if cur_acc.id == reg.active || cur_acc.has_desktop {
+                C_PROF_DEF
+            } else {
+                C_PROF_ISO
+            },
+        ),
         span("│", C_BORDER),
     ]);
 
@@ -886,12 +1166,19 @@ fn build_horizontal_lines(
         span("  ADDED:   ", C_TITLE),
         span(cur_acc.added_at.format("%Y-%m-%d").to_string(), C_TEXT),
         span("          TIER:    ", C_TITLE),
-        span(format!("{:<20}", plan_text), if is_cur_pro { C_ACT_COUNT } else { C_MUTED }),
+        span(
+            format!("{:<20}", plan_text),
+            if is_cur_pro { C_ACT_COUNT } else { C_MUTED },
+        ),
         span("│", C_BORDER),
     ]);
 
     // Row 4: Section Divider
-    let section_title = if is_cur_pro { "── GEMINI MODELS (PRO) " } else { "── GEMINI MODELS (FREE) " };
+    let section_title = if is_cur_pro {
+        "── GEMINI MODELS (PRO) "
+    } else {
+        "── GEMINI MODELS (FREE) "
+    };
     let sec_dashes = w_right_inner.saturating_sub(section_title.chars().count() + 2);
     right_box_lines.push(vec![
         span("│", C_BORDER),
@@ -901,69 +1188,118 @@ fn build_horizontal_lines(
     ]);
 
     // Row 5: Models description
-    let models_desc = cur_acc.quota_group_desc.as_deref().unwrap_or(if is_cur_pro {
-        "Models within this group: Gemini Flash, Gemini Pro"
-    } else {
-        "Models within this group: Gemini Flash"
-    });
-    right_box_lines.push(box_row(vec![
-        span("  ", C_TEXT),
-        span(trunc_str(models_desc, 56), C_MUTED),
-    ], w_right_inner, C_BORDER));
+    let models_desc = cur_acc
+        .quota_group_desc
+        .as_deref()
+        .unwrap_or(if is_cur_pro {
+            "Models within this group: Gemini Flash, Gemini Pro"
+        } else {
+            "Models within this group: Gemini Flash"
+        });
+    right_box_lines.push(box_row(
+        vec![
+            span("  ", C_TEXT),
+            span(trunc_str(models_desc, 56), C_MUTED),
+        ],
+        w_right_inner,
+        C_BORDER,
+    ));
 
     // Rows 6, 7, 8: Weekly Usage
     let q_5h = cur_acc.quota_5h.unwrap_or(100.0);
     let q_wk = cur_acc.quota_weekly.unwrap_or(100.0);
-    let reset_5h_str = cur_acc.quota_reset_5h.as_deref()
+    let reset_5h_str = cur_acc
+        .quota_reset_5h
+        .as_deref()
         .map(format_relative_countdown)
         .unwrap_or_else(|| "Refreshes in 5h 00m".into());
-    let reset_wk_str = cur_acc.quota_reset_weekly.as_deref()
+    let reset_wk_str = cur_acc
+        .quota_reset_weekly
+        .as_deref()
         .map(format_relative_countdown)
         .unwrap_or_else(|| "Refreshes in 165h 00m".into());
 
     let gauge_bar_len = 44;
 
-    right_box_lines.push(box_row(vec![
-        span("  Weekly Limit Remaining", C_TEXT),
-    ], w_right_inner, C_BORDER));
+    right_box_lines.push(box_row(
+        vec![span("  Weekly Limit Remaining", C_TEXT)],
+        w_right_inner,
+        C_BORDER,
+    ));
 
     let gauge_wk = make_gauge(q_wk, gauge_bar_len);
-    let wk_pct_col = if q_wk >= 50.0 { C_ACT_COUNT } else if q_wk >= 20.0 { C_KEY } else { C_INA_COUNT };
-    right_box_lines.push(box_row(vec![
-        span("    ", Color::Reset),
-        span(gauge_wk, wk_pct_col),
-        span(format!(" {:>6.2}%", q_wk), wk_pct_col),
-    ], w_right_inner, C_BORDER));
+    let wk_pct_col = if q_wk >= 50.0 {
+        C_ACT_COUNT
+    } else if q_wk >= 20.0 {
+        C_KEY
+    } else {
+        C_INA_COUNT
+    };
+    right_box_lines.push(box_row(
+        vec![
+            span("    ", Color::Reset),
+            span(gauge_wk, wk_pct_col),
+            span(format!(" {:>6.2}%", q_wk), wk_pct_col),
+        ],
+        w_right_inner,
+        C_BORDER,
+    ));
 
-    right_box_lines.push(box_row(vec![
-        span(format!("    {}", reset_wk_str), C_MUTED),
-    ], w_right_inner, C_BORDER));
+    right_box_lines.push(box_row(
+        vec![span(format!("    {}", reset_wk_str), C_MUTED)],
+        w_right_inner,
+        C_BORDER,
+    ));
 
     // Rows 9, 10, 11: Five Hour Usage
-    right_box_lines.push(box_row(vec![
-        span("  Five Hour Limit Remaining", if is_cur_pro { C_TEXT } else { C_MUTED }),
-    ], w_right_inner, C_BORDER));
+    right_box_lines.push(box_row(
+        vec![span(
+            "  Five Hour Limit Remaining",
+            if is_cur_pro { C_TEXT } else { C_MUTED },
+        )],
+        w_right_inner,
+        C_BORDER,
+    ));
 
     if is_cur_pro {
         let gauge_5h = make_gauge(q_5h, gauge_bar_len);
-        let h5_pct_col = if q_5h >= 50.0 { C_ACT_COUNT } else if q_5h >= 20.0 { C_KEY } else { C_INA_COUNT };
-        right_box_lines.push(box_row(vec![
-            span("    ", Color::Reset),
-            span(gauge_5h, h5_pct_col),
-            span(format!(" {:>6.2}%", q_5h), h5_pct_col),
-        ], w_right_inner, C_BORDER));
+        let h5_pct_col = if q_5h >= 50.0 {
+            C_ACT_COUNT
+        } else if q_5h >= 20.0 {
+            C_KEY
+        } else {
+            C_INA_COUNT
+        };
+        right_box_lines.push(box_row(
+            vec![
+                span("    ", Color::Reset),
+                span(gauge_5h, h5_pct_col),
+                span(format!(" {:>6.2}%", q_5h), h5_pct_col),
+            ],
+            w_right_inner,
+            C_BORDER,
+        ));
 
-        right_box_lines.push(box_row(vec![
-            span(format!("    {}", reset_5h_str), C_MUTED),
-        ], w_right_inner, C_BORDER));
+        right_box_lines.push(box_row(
+            vec![span(format!("    {}", reset_5h_str), C_MUTED)],
+            w_right_inner,
+            C_BORDER,
+        ));
     } else {
-        right_box_lines.push(box_row(vec![
-            span("    N/A  (Standard Free tier has weekly quota only)", C_DARK),
-        ], w_right_inner, C_BORDER));
+        right_box_lines.push(box_row(
+            vec![span(
+                "    N/A  (Standard Free tier has weekly quota only)",
+                C_DARK,
+            )],
+            w_right_inner,
+            C_BORDER,
+        ));
 
-        right_box_lines.push(box_row(vec![
-            span("    Refreshes on weekly cycle", C_MUTED),
-        ], w_right_inner, C_BORDER));
+        right_box_lines.push(box_row(
+            vec![span("    Refreshes on weekly cycle", C_MUTED)],
+            w_right_inner,
+            C_BORDER,
+        ));
     }
 
     // Row 12: Command Center Divider
@@ -974,55 +1310,82 @@ fn build_horizontal_lines(
     ]);
 
     // Rows 13, 14, 15: Commands
-    right_box_lines.push(box_row(vec![
-        span("  ", C_TEXT),
-        span(format!("[1-{}]", total_count), C_KEY),
-        span(" Switch Account       ", C_TEXT),
-        span("[A]", C_KEY),
-        span(" Add Session", C_TEXT),
-    ], w_right_inner, C_BORDER));
-    right_box_lines.push(box_row(vec![
-        span("  ", C_TEXT),
-        span("[D]", C_KEY),
-        span("    Delete Account       ", C_TEXT),
-        span("[I]", C_KEY),
-        span(" Import Backup", C_TEXT),
-    ], w_right_inner, C_BORDER));
-    right_box_lines.push(box_row(vec![
-        span("  ", C_TEXT),
-        span("[R]", C_KEY),
-        span("    Refresh Quotas       ", C_TEXT),
-        span("[Q]", C_KEY),
-        span(" Quit Switcher", C_TEXT),
-    ], w_right_inner, C_BORDER));
+    right_box_lines.push(box_row(
+        vec![
+            span("  ", C_TEXT),
+            span(format!("[1-{}]", total_count), C_KEY),
+            span(" Switch Account       ", C_TEXT),
+            span("[A]", C_KEY),
+            span(" Add Session", C_TEXT),
+        ],
+        w_right_inner,
+        C_BORDER,
+    ));
+    right_box_lines.push(box_row(
+        vec![
+            span("  ", C_TEXT),
+            span("[D]", C_KEY),
+            span("    Delete Account       ", C_TEXT),
+            span("[I]", C_KEY),
+            span(" Import Backup", C_TEXT),
+        ],
+        w_right_inner,
+        C_BORDER,
+    ));
+    right_box_lines.push(box_row(
+        vec![
+            span("  ", C_TEXT),
+            span("[R]", C_KEY),
+            span("    Refresh Quotas       ", C_TEXT),
+            span("[Q]", C_KEY),
+            span(" Quit Switcher", C_TEXT),
+        ],
+        w_right_inner,
+        C_BORDER,
+    ));
 
     // Row 16: Prompt line
     let prompt_display = match state {
-        InputState::Normal => if input_buf.is_empty() { "_".to_string() } else { format!("{input_buf}_") },
+        InputState::Normal => {
+            if input_buf.is_empty() {
+                "_".to_string()
+            } else {
+                format!("{input_buf}_")
+            }
+        }
         InputState::PromptImport => format!("{input_buf}_"),
         InputState::ConfirmDelete(_, _) | InputState::PromptAdd => "_".to_string(),
     };
-    right_box_lines.push(box_row(vec![
-        span("  ❯ ", C_PROMPT),
-        span(trunc_str(&prompt_display, 54), C_TEXT),
-    ], w_right_inner, C_BORDER));
+    right_box_lines.push(box_row(
+        vec![
+            span("  ❯ ", C_PROMPT),
+            span(trunc_str(&prompt_display, 54), C_TEXT),
+        ],
+        w_right_inner,
+        C_BORDER,
+    ));
 
     // Row 17: Status message
-    right_box_lines.push(box_row(vec![
-        span("  ", C_TEXT),
-        span(trunc_str(status_msg, 56), C_TITLE),
-    ], w_right_inner, C_BORDER));
+    right_box_lines.push(box_row(
+        vec![span("  ", C_TEXT), span(trunc_str(status_msg, 56), C_TITLE)],
+        w_right_inner,
+        C_BORDER,
+    ));
 
     // Equalize left and right boxes so bottom borders align
     while right_box_lines.len() < left_box_lines.len() {
-        right_box_lines.push(box_row(vec![
-            span(" ", Color::Reset),
-        ], w_right_inner, C_BORDER));
+        right_box_lines.push(box_row(
+            vec![span(" ", Color::Reset)],
+            w_right_inner,
+            C_BORDER,
+        ));
     }
     while left_box_lines.len() < right_box_lines.len() {
-        left_box_lines.push(box_row(vec![
-            span(" ", Color::Reset),
-        ], w_left_inner, C_BORDER));
+        left_box_lines.push(box_row(
+            vec![span(" ", Color::Reset)],
+            w_left_inner,
+            C_BORDER,
+        ));
     }
 
     left_box_lines.push(vec![
@@ -1057,6 +1420,7 @@ fn build_horizontal_lines(
     lines
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_compact_lines(
     reg: &Registry,
     selected: usize,
@@ -1069,8 +1433,21 @@ fn build_compact_lines(
 ) -> Vec<Line> {
     let b_border = C_BORDER;
     let total_count = reg.accounts.len();
-    let active_count = if reg.accounts.iter().any(|a| a.id == reg.active) { 1 } else { 0 };
-    let pro_count = reg.accounts.iter().filter(|a| matches!(a.plan.as_deref(), Some("Pro") | Some("Google AI Plus") | Some("Ultra"))).count();
+    let active_count = if reg.accounts.iter().any(|a| a.id == reg.active) {
+        1
+    } else {
+        0
+    };
+    let pro_count = reg
+        .accounts
+        .iter()
+        .filter(|a| {
+            matches!(
+                a.plan.as_deref(),
+                Some("Pro") | Some("Google AI Plus") | Some("Ultra")
+            )
+        })
+        .count();
     let free_count = total_count.saturating_sub(pro_count);
 
     let mut lines = Vec::with_capacity(25);
@@ -1078,7 +1455,13 @@ fn build_compact_lines(
     // 1. Compact Header (2 lines)
     lines.push(vec![
         span(pad, Color::Reset),
-        span(format!("{:^73}", "█████╗  ██████╗ ██╗   ██╗      █████╗ ██╗   ██╗████████╗██╗  ██╗"), C_BANNER_2),
+        span(
+            format!(
+                "{:^73}",
+                "█████╗  ██████╗ ██╗   ██╗      █████╗ ██╗   ██╗████████╗██╗  ██╗"
+            ),
+            C_BANNER_2,
+        ),
     ]);
     lines.push(vec![
         span(pad, Color::Reset),
@@ -1103,8 +1486,14 @@ fn build_compact_lines(
     lines.push(vec![
         span(pad, Color::Reset),
         span("│", b_border),
-        span(format!("{:^23}", format!("{:02}", total_count)), C_ACC_COUNT),
-        span(format!("{:^25}", format!("{:02}", active_count)), C_ACT_COUNT),
+        span(
+            format!("{:^23}", format!("{:02}", total_count)),
+            C_ACC_COUNT,
+        ),
+        span(
+            format!("{:^25}", format!("{:02}", active_count)),
+            C_ACT_COUNT,
+        ),
         span(format!("{:^23}", format!("{:02}", free_count)), C_INA_COUNT),
         span("│", b_border),
     ]);
@@ -1131,13 +1520,19 @@ fn build_compact_lines(
     lines.push(vec![
         span(pad, Color::Reset),
         span("│", b_border),
-        span("  ID STATUS   ACCOUNT / ALIAS          PLAN    5-H   WEEK", C_TITLE),
+        span(
+            "  ID STATUS   ACCOUNT / ALIAS          PLAN    5-H   WEEK",
+            C_TITLE,
+        ),
         span("│", b_border),
     ]);
     lines.push(vec![
         span(pad, Color::Reset),
         span("│", b_border),
-        span("  ── ───────  ──────────────────────── ─────── ───── ────", C_DARK),
+        span(
+            "  ── ───────  ──────────────────────── ─────── ───── ────",
+            C_DARK,
+        ),
         span("│", b_border),
     ]);
 
@@ -1172,17 +1567,33 @@ fn build_compact_lines(
             C_MUTED
         };
 
-        let is_pro = matches!(acc.plan.as_deref(), Some("Pro") | Some("Google AI Plus") | Some("Ultra"));
+        let is_pro = matches!(
+            acc.plan.as_deref(),
+            Some("Pro") | Some("Google AI Plus") | Some("Ultra")
+        );
         let h5_str = if is_pro {
-            acc.quota_5h.map(|p| {
-                if p >= 99.95 { " 100%".into() } else { format!("{:>4.1}%", p) }
-            }).unwrap_or_else(|| " 100%".into())
+            acc.quota_5h
+                .map(|p| {
+                    if p >= 99.95 {
+                        " 100%".into()
+                    } else {
+                        format!("{:>4.1}%", p)
+                    }
+                })
+                .unwrap_or_else(|| " 100%".into())
         } else {
             "  -- ".into()
         };
-        let wk_str = acc.quota_weekly.map(|p| {
-            if p >= 99.95 { "100%".into() } else { format!("{:>3.0}%", p) }
-        }).unwrap_or_else(|| "100%".into());
+        let wk_str = acc
+            .quota_weekly
+            .map(|p| {
+                if p >= 99.95 {
+                    "100%".into()
+                } else {
+                    format!("{:>3.0}%", p)
+                }
+            })
+            .unwrap_or_else(|| "100%".into());
 
         let row_bg = if is_selected { C_SEL_BG } else { Color::Reset };
         let text_col = C_TEXT;
@@ -1191,17 +1602,33 @@ fn build_compact_lines(
             span(pad, Color::Reset),
             span("│", b_border),
             span_bg("  ", text_col, row_bg),
-            span_bg(id_str, if is_selected { C_SEL_ID } else { C_ACC_COUNT }, row_bg),
+            span_bg(
+                id_str,
+                if is_selected { C_SEL_ID } else { C_ACC_COUNT },
+                row_bg,
+            ),
             span_bg(" ", text_col, row_bg),
             span_bg(dot, st_col, row_bg),
             span_bg(" ", text_col, row_bg),
             span_bg(st_txt, st_col, row_bg),
             span_bg(" ", text_col, row_bg),
-            span_bg(name_padded, if !acc.alias.is_empty() { C_TITLE } else { text_col }, row_bg),
+            span_bg(
+                name_padded,
+                if !acc.alias.is_empty() {
+                    C_TITLE
+                } else {
+                    text_col
+                },
+                row_bg,
+            ),
             span_bg(" ", text_col, row_bg),
             span_bg(plan_label, plan_col, row_bg),
             span_bg(" ", text_col, row_bg),
-            span_bg(format!("{:>5}", h5_str), if is_pro { C_ACT_COUNT } else { C_DARK }, row_bg),
+            span_bg(
+                format!("{:>5}", h5_str),
+                if is_pro { C_ACT_COUNT } else { C_DARK },
+                row_bg,
+            ),
             span_bg(" ", text_col, row_bg),
             span_bg(format!("{:>4}", wk_str), C_TEXT, row_bg),
             span("│", b_border),
@@ -1214,7 +1641,10 @@ fn build_compact_lines(
         span("  ● ACTIVE: ", C_ACT_COUNT),
         span(format!("{:02}", active_count), C_TEXT),
         span("   ○ IDLE: ", C_MUTED),
-        span(format!("{:02}", total_count.saturating_sub(active_count)), C_TEXT),
+        span(
+            format!("{:02}", total_count.saturating_sub(active_count)),
+            C_TEXT,
+        ),
         span("   PRO: ", C_ACT_COUNT),
         span(format!("{:02}", pro_count), C_TEXT),
         span("   FREE: ", C_INA_COUNT),
@@ -1228,7 +1658,10 @@ fn build_compact_lines(
 
     // 4. Compact ACCOUNT DETAILS & USAGE Card
     let cur_acc = &reg.accounts[selected];
-    let is_cur_pro = matches!(cur_acc.plan.as_deref(), Some("Pro") | Some("Google AI Plus") | Some("Ultra"));
+    let is_cur_pro = matches!(
+        cur_acc.plan.as_deref(),
+        Some("Pro") | Some("Google AI Plus") | Some("Ultra")
+    );
     let badge = format!("[ {:02} / {:02} ]", selected + 1, total_count);
     let d_prefix = "╭─ ACCOUNT DETAILS & USAGE ";
     let d_suffix = format!(" {badge} ╮");
@@ -1252,51 +1685,105 @@ fn build_compact_lines(
 
     let q_5h = cur_acc.quota_5h.unwrap_or(100.0);
     let q_wk = cur_acc.quota_weekly.unwrap_or(100.0);
-    let reset_5h_str = cur_acc.quota_reset_5h.as_deref()
+    let reset_5h_str = cur_acc
+        .quota_reset_5h
+        .as_deref()
         .map(format_relative_countdown)
         .unwrap_or_else(|| "Refreshes in 5h 00m".into());
-    let reset_wk_str = cur_acc.quota_reset_weekly.as_deref()
+    let reset_wk_str = cur_acc
+        .quota_reset_weekly
+        .as_deref()
         .map(format_relative_countdown)
         .unwrap_or_else(|| "Refreshes in 165h 00m".into());
 
-    let models_desc = cur_acc.quota_group_desc.as_deref().unwrap_or(if is_cur_pro {
-        "Models within this group: Gemini Flash, Gemini Pro"
-    } else {
-        "Models within this group: Gemini Flash"
-    });
+    let models_desc = cur_acc
+        .quota_group_desc
+        .as_deref()
+        .unwrap_or(if is_cur_pro {
+            "Models within this group: Gemini Flash, Gemini Pro"
+        } else {
+            "Models within this group: Gemini Flash"
+        });
 
-    lines.push(box_row(vec![
-        span("  GEMINI: ", C_TITLE),
-        span(trunc_str(models_desc, 58), C_MUTED),
-    ], 71, b_border));
+    lines.push(box_row(
+        vec![
+            span("  GEMINI: ", C_TITLE),
+            span(trunc_str(models_desc, 58), C_MUTED),
+        ],
+        71,
+        b_border,
+    ));
 
     if is_cur_pro {
         let gauge_wk = make_gauge(q_wk, 16);
         let gauge_5h = make_gauge(q_5h, 16);
-        lines.push(box_row(vec![
-            span("  WEEKLY: ", C_TITLE),
-            span(gauge_wk, if q_wk >= 50.0 { C_ACT_COUNT } else if q_wk >= 20.0 { C_KEY } else { C_INA_COUNT }),
-            span(format!(" {:>6.2}%", q_wk), C_TEXT),
-            span(format!(" · {}", reset_wk_str), C_MUTED),
-        ], 71, b_border));
-        lines.push(box_row(vec![
-            span("  5-HOUR: ", C_TITLE),
-            span(gauge_5h, if q_5h >= 50.0 { C_ACT_COUNT } else if q_5h >= 20.0 { C_KEY } else { C_INA_COUNT }),
-            span(format!(" {:>6.2}%", q_5h), C_TEXT),
-            span(format!(" · {}", reset_5h_str), C_MUTED),
-        ], 71, b_border));
+        lines.push(box_row(
+            vec![
+                span("  WEEKLY: ", C_TITLE),
+                span(
+                    gauge_wk,
+                    if q_wk >= 50.0 {
+                        C_ACT_COUNT
+                    } else if q_wk >= 20.0 {
+                        C_KEY
+                    } else {
+                        C_INA_COUNT
+                    },
+                ),
+                span(format!(" {:>6.2}%", q_wk), C_TEXT),
+                span(format!(" · {}", reset_wk_str), C_MUTED),
+            ],
+            71,
+            b_border,
+        ));
+        lines.push(box_row(
+            vec![
+                span("  5-HOUR: ", C_TITLE),
+                span(
+                    gauge_5h,
+                    if q_5h >= 50.0 {
+                        C_ACT_COUNT
+                    } else if q_5h >= 20.0 {
+                        C_KEY
+                    } else {
+                        C_INA_COUNT
+                    },
+                ),
+                span(format!(" {:>6.2}%", q_5h), C_TEXT),
+                span(format!(" · {}", reset_5h_str), C_MUTED),
+            ],
+            71,
+            b_border,
+        ));
     } else {
         let gauge_wk = make_gauge(q_wk, 16);
-        lines.push(box_row(vec![
-            span("  WEEKLY: ", C_TITLE),
-            span(gauge_wk, if q_wk >= 50.0 { C_ACT_COUNT } else if q_wk >= 20.0 { C_KEY } else { C_INA_COUNT }),
-            span(format!(" {:>6.2}%", q_wk), C_TEXT),
-            span(format!(" · {}", reset_wk_str), C_MUTED),
-        ], 71, b_border));
-        lines.push(box_row(vec![
-            span("  5-HOUR: ", C_MUTED),
-            span("N/A (Free Tier has weekly quota only)", C_DARK),
-        ], 71, b_border));
+        lines.push(box_row(
+            vec![
+                span("  WEEKLY: ", C_TITLE),
+                span(
+                    gauge_wk,
+                    if q_wk >= 50.0 {
+                        C_ACT_COUNT
+                    } else if q_wk >= 20.0 {
+                        C_KEY
+                    } else {
+                        C_INA_COUNT
+                    },
+                ),
+                span(format!(" {:>6.2}%", q_wk), C_TEXT),
+                span(format!(" · {}", reset_wk_str), C_MUTED),
+            ],
+            71,
+            b_border,
+        ));
+        lines.push(box_row(
+            vec![
+                span("  5-HOUR: ", C_MUTED),
+                span("N/A (Free Tier has weekly quota only)", C_DARK),
+            ],
+            71,
+            b_border,
+        ));
     }
     lines.push(vec![
         span(pad, Color::Reset),
@@ -1330,7 +1817,13 @@ fn build_compact_lines(
     ]);
 
     let prompt_display = match state {
-        InputState::Normal => if input_buf.is_empty() { "_".to_string() } else { format!("{input_buf}_") },
+        InputState::Normal => {
+            if input_buf.is_empty() {
+                "_".to_string()
+            } else {
+                format!("{input_buf}_")
+            }
+        }
         InputState::PromptImport => format!("{input_buf}_"),
         InputState::ConfirmDelete(_, _) | InputState::PromptAdd => "_".to_string(),
     };

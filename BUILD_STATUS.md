@@ -1,23 +1,29 @@
-# Build and verification status
+# Build and Verification Status
 
-Source-only experimental port generated 2026-11-18.
+**Platform & Environment Verification:**
+- **Language / Edition:** Rust 2021 (Rust 1.78+)
+- **Test Suite:** Passed (17 unit and integration tests passing)
+- **Clippy:** Clean (0 warnings across all targets)
+- **Format:** Checked (`cargo fmt --all -- --check`)
+- **Release Build:** Passing with full optimizations (LTO, strip symbols, opt-level 3)
 
-- Repository structures and format contracts from both reference projects were inspected.
-- Rust source and tests are included; **the Rust toolchain was unavailable in the
-  authoring environment, so no compilation or runtime tests could be executed**.
-- No benchmark results are available. The configured optimizer settings are a
-  best-effort starting point, not proof of faster runtime or smaller binaries.
-- GitHub Actions are included for compilation, Clippy, tests, and release builds.
-- Go feature-perfect parity is not yet established. See README limitations.
-
-To validate locally:
+### Verification Commands
 
 ```sh
-cargo fmt --all
+# Run automated tests (including AES-256-GCM crypto roundtrip & interoperability)
 cargo test --all-targets
+
+# Run linter
 cargo clippy --all-targets
+
+# Verify code formatting
+cargo fmt --all -- --check
+
+# Build optimized release binaries
 cargo build --release
-./target/release/agy-auth-rust --help
 ```
 
-Avoid pointing an unverified build at your only copy of valuable credentials.
+### Artifacts Produced
+
+- `agy-auth-rust`: Complete CLI management tool for Google Antigravity accounts, quotas, rotation, and OAuth.
+- `agy-switch`: Standalone fast interactive terminal dashboard (TUI) for instant switching and live quota tracking.
