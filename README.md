@@ -219,43 +219,168 @@ Commands:
 
 ## 📦 Installation
 
-### Prerequisites
+### 📋 Prerequisites
+- **Official Google Antigravity CLI (`agy`)** installed and authenticated.
+- **Rust toolchain (1.78+)** if building via `cargo` ([Install Rust](https://rustup.rs/)).
 
-- **Rust 1.78+** and `cargo` installed ([Install Rust](https://rustup.rs/))
-- **Google Antigravity CLI (`agy`)** installed and authenticated
+---
 
-### Option A: Install via Cargo (Recommended)
+### 🐧 Linux (All Major Distributions)
+
+#### 1. Install System Dependencies
+`agy-auth-rust` interfaces with your desktop's Secret Service keyring over D-Bus (with automatic encrypted file fallback). Install the basic build and D-Bus development headers:
+
+<details open>
+<summary><b>Select your Linux distribution:</b></summary>
+
+- **Ubuntu / Debian / Linux Mint / Pop!_OS:**
+  ```sh
+  sudo apt update
+  sudo apt install -y build-essential pkg-config libdbus-1-dev
+  ```
+
+- **Fedora / RHEL / CentOS / Rocky Linux / AlmaLinux:**
+  ```sh
+  sudo dnf install -y gcc pkgconf-pkg-config dbus-devel
+  ```
+
+- **Arch Linux / Manjaro / EndeavourOS:**
+  ```sh
+  sudo pacman -S --needed base-devel dbus
+  ```
+
+- **openSUSE (Tumbleweed / Leap):**
+  ```sh
+  sudo zypper install -y gcc pkg-config dbus-1-devel
+  ```
+
+- **Alpine Linux:**
+  ```sh
+  sudo apk add build-base pkgconf dbus-dev
+  ```
+
+- **Void Linux:**
+  ```sh
+  sudo xbps-install -Sy base-devel dbus-devel
+  ```
+
+</details>
+
+#### 2. Install via Cargo (One-Liner)
+If you have Rust installed:
+```sh
+cargo install --git https://github.com/deactivated0/agy-auth-rust.git
+```
+
+#### 3. Or Install Precompiled Binaries
+```sh
+# Download and install latest Linux x86_64 binaries directly to /usr/local/bin
+curl -s https://api.github.com/repos/deactivated0/agy-auth-rust/releases/latest \
+  | grep "browser_download_url.*x86_64-unknown-linux-gnu.tar.gz" \
+  | cut -d : -f 2,3 \
+  | tr -d \" \
+  | wget -qi - -O - \
+  | sudo tar -xz -C /usr/local/bin
+```
+
+#### 4. Add Desktop Launcher (Optional)
+Register `agy-switch` into your desktop launcher (GNOME, KDE Plasma, XFCE, Rofi, Wofi, Albert):
+```sh
+agy-auth-rust desktop
+```
+
+---
+
+### 🍎 macOS (Apple Silicon & Intel)
+
+#### 1. Install Dependencies
+Ensure Apple Command Line Tools are installed:
+```sh
+xcode-select --install
+```
+
+#### 2. Install via Cargo
+```sh
+cargo install --git https://github.com/deactivated0/agy-auth-rust.git
+```
+
+#### 3. Or Install Precompiled Binaries
+
+- **Apple Silicon (M1 / M2 / M3 / M4 - aarch64):**
+  ```sh
+  curl -s https://api.github.com/repos/deactivated0/agy-auth-rust/releases/latest \
+    | grep "browser_download_url.*aarch64-apple-darwin.tar.gz" \
+    | cut -d : -f 2,3 \
+    | tr -d \" \
+    | wget -qi - -O - \
+    | sudo tar -xz -C /usr/local/bin
+  ```
+
+- **Intel Macs (x86_64):**
+  ```sh
+  curl -s https://api.github.com/repos/deactivated0/agy-auth-rust/releases/latest \
+    | grep "browser_download_url.*x86_64-apple-darwin.tar.gz" \
+    | cut -d : -f 2,3 \
+    | tr -d \" \
+    | wget -qi - -O - \
+    | sudo tar -xz -C /usr/local/bin
+  ```
+
+---
+
+### 🪟 Windows
+
+#### Option 1: Install via PowerShell (Quick Setup)
+Run PowerShell as Administrator or regular user:
+```powershell
+# Create target directory
+$installDir = "$env:LOCALAPPDATA\Programs\agy-auth-rust"
+New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+
+# Download latest release zip
+$url = (Invoke-RestMethod -Uri "https://api.github.com/repos/deactivated0/agy-auth-rust/releases/latest").assets | Where-Object { $_.name -like "*windows-msvc.zip" } | Select-Object -ExpandProperty browser_download_url
+Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\agy-auth-rust.zip"
+
+# Extract binaries
+Expand-Archive -Path "$env:TEMP\agy-auth-rust.zip" -DestinationPath $installDir -Force
+Remove-Item "$env:TEMP\agy-auth-rust.zip"
+
+# Add to User PATH if not already present
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+if ($userPath -notlike "*$installDir*") {
+    [Environment]::SetEnvironmentVariable("Path", "$userPath;$installDir", "User")
+    $env:Path += ";$installDir"
+}
+
+Write-Host "agy-auth-rust and agy-switch successfully installed!" -ForegroundColor Green
+```
+
+#### Option 2: Install via Cargo
+```powershell
+cargo install --git https://github.com/deactivated0/agy-auth-rust.git
+```
+
+---
+
+### 🛠️ Building from Source (All Platforms)
 
 ```sh
 # Clone repository
 git clone https://github.com/deactivated0/agy-auth-rust.git
 cd agy-auth-rust
 
-# Build optimized release binaries & install to ~/.cargo/bin
-cargo install --path .
-
-# Verify installation
-agy-auth-rust --version
-agy-switch --help
-```
-
-### Option B: Build from Source
-
-```sh
+# Build optimized release binaries
 cargo build --release
 
-# The compiled binaries will be available at:
-# ./target/release/agy-auth-rust
-# ./target/release/agy-switch
+# The compiled binaries will be located at:
+# Linux/macOS: target/release/agy-auth-rust and target/release/agy-switch
+# Windows:     target/release/agy-auth-rust.exe and target/release/agy-switch.exe
 ```
 
-For ultra-compact embedded or resource-constrained environments:
+For ultra-compact binary footprint (stripping symbols and `opt-level = "z"`):
 ```sh
 cargo build --profile small
 ```
-
-### Option C: Precompiled Binaries
-Download precompiled archives for Linux, macOS, and Windows directly from the [GitHub Releases](https://github.com/deactivated0/agy-auth-rust/releases) page.
 
 ---
 
