@@ -25,7 +25,7 @@ fn valid_secret(b:u8)->bool{b.is_ascii_alphanumeric()||b==b'-'||b==b'_'}
 // The discovery mechanism below verifies hashes and does not embed those credentials in the executable.
 fn discover_client(binary:&Path,gcp:bool)->Result<(String,String)>{
     let meta=fs::metadata(binary).with_context(||format!("read agy executable {}",binary.display()))?;
-    if meta.len()>256*1024*1024 {bail!("agy binary too large for client discovery");}
+    if meta.len()>512*1024*1024 {bail!("agy binary too large for client discovery");}
     let bytes=fs::read(binary)?;
     let wanted_id=if gcp{GCP_ID_HASH}else{CLIENT_ID_HASH};
     let wanted_secrets=if gcp{&[GCP_SECRET_HASH][..]}else{&[CLIENT_SECRET_HASH,CLIENT_SECRET_HASH_V2][..]};

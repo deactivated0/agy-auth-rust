@@ -5,7 +5,7 @@ use serde_json::{json,Value};
 use std::{collections::{HashMap,VecDeque},sync::{mpsc,Arc,Mutex},thread,time::Duration};
 use crate::{model::{Account,Credential},oauth,store::Store};
 
-const API:&str="https://daily-cloudcode-pa.googleapis.com/v1internal";
+const API:&str="https://cloudcode-pa.googleapis.com/v1internal";
 #[derive(Clone,Debug,Serialize,Deserialize)]
 pub struct Bucket {pub id:String,pub name:String,pub window:String,pub remaining_percent:u8,pub reset_time:Option<String>}
 #[derive(Clone,Debug,Serialize,Deserialize)]
@@ -63,21 +63,23 @@ pub fn fetch(c:&Credential)->Result<Usage>{
     let project=project(c);
     let ag=ureq::AgentBuilder::new().timeout(Duration::from_secs(15)).build();
     let assist=post(&ag,"loadCodeAssist",&access,&json!({"cloudaicompanionProject":project,"metadata":{"ideType":"IDE_UNSPECIFIED","platform":"PLATFORM_UNSPECIFIED","pluginType":"GEMINI","duetProject":project}}))?;
-    let summary=post(&ag,"retrieveUserQuotaSummary",&access,&json!({"project":project}))?;
     let mut usage=Usage{account:c.email.clone(),plan:plan(&assist,c),five_hour:None,weekly:None,groups:vec![],updated_at:Utc::now()};
-    let sources=summary["groups"].as_array().ok_or_else(||anyhow!("quota summary missing groups"))?;
-    for g in sources {
-        let mut group=Group{name:g["displayName"].as_str().unwrap_or("Unnamed group").into(),description:g["description"].as_str().unwrap_or("").into(),buckets:vec![]};
-        if let Some(buckets)=g["buckets"].as_array(){for b in buckets {
-            let Some(f)=b["remainingFraction"].as_f64()else{continue};
-            if !f.is_finite(){continue;}
-            let id=b["bucketId"].as_str().unwrap_or("").to_owned();
-            let window=b["window"].as_str().unwrap_or("").to_owned();
-            let bucket=Bucket{id:id.clone(),name:b["displayName"].as_str().unwrap_or("").into(),window:window.clone(),remaining_percent:(f.clamp(0.,1.)*100.).round() as u8,reset_time:b["resetTime"].as_str().map(ToOwned::to_owned)};
-            match bucket_window(&window,&id){Some("5h")=>lower(&mut usage.five_hour,&bucket),Some("weekly")=>lower(&mut usage.weekly,&bucket),_=>()}
-            group.buckets.push(bucket);
-        }}
-        usage.groups.push(group);
+    if let Ok(summary)=post(&ag,"retrieveUserQuotaSummary",&access,&json!({"project":project})){
+        if let Some(sources)=summary["groups"].as_array(){
+            for g in sources {
+                let mut group=Group{name:g["displayName"].as_str().unwrap_or("Unnamed group").into(),description:g["description"].as_str().unwrap_or("").into(),buckets:vec![]};
+                if let Some(buckets)=g["buckets"].as_array(){for b in buckets {
+                    let Some(f)=b["remainingFraction"].as_f64()else{continue};
+                    if !f.is_finite(){continue;}
+                    let id=b["bucketId"].as_str().unwrap_or("").to_owned();
+                    let window=b["window"].as_str().unwrap_or("").to_owned();
+                    let bucket=Bucket{id:id.clone(),name:b["displayName"].as_str().unwrap_or("").into(),window:window.clone(),remaining_percent:(f.clamp(0.,1.)*100.).round() as u8,reset_time:b["resetTime"].as_str().map(ToOwned::to_owned)};
+                    match bucket_window(&window,&id){Some("5h")=>lower(&mut usage.five_hour,&bucket),Some("weekly")=>lower(&mut usage.weekly,&bucket),_=>()}
+                    group.buckets.push(bucket);
+                }}
+                usage.groups.push(group);
+            }
+        }
     }
     Ok(usage)
 }
