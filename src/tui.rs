@@ -256,20 +256,39 @@ pub fn box_row(spans: Vec<Span>, inner: usize, border_col: Color) -> Line {
     l
 }
 
-pub fn make_gauge(pct: u8, width: usize) -> String {
-    let filled = (pct as usize * width) / 100;
+pub fn make_gauge(pct: f64, width: usize) -> String {
+    let filled = ((pct.clamp(0.0, 100.0) / 100.0) * width as f64).round() as usize;
     let empty = width.saturating_sub(filled);
     format!("[{}{}]", "█".repeat(filled), "░".repeat(empty))
 }
 
-pub fn format_reset_time(iso: &str) -> String {
-    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(iso) {
-        dt.format("%b %d %H:%M").to_string()
-    } else if iso.len() >= 16 {
-        iso[5..16].replace('T', " ")
+pub fn format_relative_countdown(iso: &str) -> String {
+    let dt = chrono::DateTime::parse_from_rfc3339(iso)
+        .or_else(|_| chrono::DateTime::parse_from_str(iso, "%Y-%m-%dT%H:%M:%SZ"))
+        .map(|d| d.with_timezone(&chrono::Utc));
+
+    if let Ok(target) = dt {
+        let now = chrono::Utc::now();
+        let diff = target - now;
+        let total_secs = diff.num_seconds();
+        if total_secs <= 0 {
+            return "Refreshes soon".to_string();
+        }
+        let total_mins = total_secs / 60;
+        let hours = total_mins / 60;
+        let mins = total_mins % 60;
+        if hours > 0 {
+            format!("Refreshes in {}h {}m", hours, mins)
+        } else {
+            format!("Refreshes in {}m", mins)
+        }
     } else {
-        iso.to_string()
+        format!("Resets {}", iso)
     }
+}
+
+pub fn format_reset_time(iso: &str) -> String {
+    format_relative_countdown(iso)
 }
 
 pub enum InputState {
@@ -500,6 +519,7 @@ pub fn dashboard(
                             a.quota_weekly = u.weekly.as_ref().map(|b| b.remaining_percent);
                             a.quota_reset_5h = u.five_hour.as_ref().and_then(|b| b.reset_time.clone());
                             a.quota_reset_weekly = u.weekly.as_ref().and_then(|b| b.reset_time.clone());
+                            a.quota_group_desc = u.gemini_group().map(|g| g.description.clone());
                         }
                     }
                     let _ = reg.normalize();
@@ -725,11 +745,15 @@ fn build_horizontal_lines(
 
             let is_pro = matches!(acc.plan.as_deref(), Some("Pro") | Some("Google AI Plus") | Some("Ultra"));
             let h5_str = if is_pro {
-                acc.quota_5h.map(|p| format!("{:>3}%", p)).unwrap_or_else(|| " 100%".into())
+                acc.quota_5h.map(|p| {
+                    if p >= 99.95 { " 100%".into() } else { format!("{:>4.1}%", p) }
+                }).unwrap_or_else(|| " 100%".into())
             } else {
                 "  -- ".into()
             };
-            let wk_str = acc.quota_weekly.map(|p| format!("{:>3}%", p)).unwrap_or_else(|| "100%".into());
+            let wk_str = acc.quota_weekly.map(|p| {
+                if p >= 99.95 { "100%".into() } else { format!("{:>3.0}%", p) }
+            }).unwrap_or_else(|| "100%".into());
 
             let row_bg = if is_selected { C_SEL_BG } else { Color::Reset };
             let text_col = C_TEXT;
@@ -777,11 +801,6 @@ fn build_horizontal_lines(
         span("   FREE: ", C_INA_COUNT),
         span(format!("{:02}", free_count), C_TEXT),
         span("        │", C_BORDER),
-    ]);
-    left_box_lines.push(vec![
-        span("╰", C_BORDER),
-        span("─".repeat(w_left_inner), C_BORDER),
-        span("╯", C_BORDER),
     ]);
 
     // Right Panel: SELECTED ACCOUNT & LIVE USAGE (width 62, inner 60)
@@ -835,7 +854,7 @@ fn build_horizontal_lines(
     ]);
 
     // Row 4: Section Divider
-    let section_title = if is_cur_pro { "── LIVE USAGE & QUOTA (PRO TIER) " } else { "── LIVE USAGE & QUOTA (FREE TIER) " };
+    let section_title = if is_cur_pro { "── GEMINI MODELS (PRO) " } else { "── GEMINI MODELS (FREE) " };
     let sec_dashes = w_right_inner.saturating_sub(section_title.chars().count() + 2);
     right_box_lines.push(vec![
         span("│", C_BORDER),
@@ -844,63 +863,80 @@ fn build_horizontal_lines(
         span(format!("{}│", "─".repeat(sec_dashes)), C_BORDER),
     ]);
 
-    // Rows 5 & 6: Usage Gauges
-    let q_5h = cur_acc.quota_5h.unwrap_or(100);
-    let q_wk = cur_acc.quota_weekly.unwrap_or(if is_cur_pro { 48 } else { 100 });
-    let reset_5h_str = cur_acc.quota_reset_5h.as_deref().map(format_reset_time).unwrap_or_else(|| "in 5h".into());
-    let reset_wk_str = cur_acc.quota_reset_weekly.as_deref().map(format_reset_time).unwrap_or_else(|| "7 days".into());
+    // Row 5: Models description
+    let models_desc = cur_acc.quota_group_desc.as_deref().unwrap_or(if is_cur_pro {
+        "Models within this group: Gemini Flash, Gemini Pro"
+    } else {
+        "Models within this group: Gemini Flash"
+    });
+    right_box_lines.push(box_row(vec![
+        span("  ", C_TEXT),
+        span(trunc_str(models_desc, 56), C_MUTED),
+    ], w_right_inner, C_BORDER));
+
+    // Rows 6, 7, 8: Weekly Usage
+    let q_5h = cur_acc.quota_5h.unwrap_or(100.0);
+    let q_wk = cur_acc.quota_weekly.unwrap_or(100.0);
+    let reset_5h_str = cur_acc.quota_reset_5h.as_deref()
+        .map(format_relative_countdown)
+        .unwrap_or_else(|| "Refreshes in 5h 00m".into());
+    let reset_wk_str = cur_acc.quota_reset_weekly.as_deref()
+        .map(format_relative_countdown)
+        .unwrap_or_else(|| "Refreshes in 165h 00m".into());
+
+    let gauge_bar_len = 44;
+
+    right_box_lines.push(box_row(vec![
+        span("  Weekly Limit Remaining", C_TEXT),
+    ], w_right_inner, C_BORDER));
+
+    let gauge_wk = make_gauge(q_wk, gauge_bar_len);
+    let wk_pct_col = if q_wk >= 50.0 { C_ACT_COUNT } else if q_wk >= 20.0 { C_KEY } else { C_INA_COUNT };
+    right_box_lines.push(box_row(vec![
+        span("    ", Color::Reset),
+        span(gauge_wk, wk_pct_col),
+        span(format!(" {:>6.2}%", q_wk), wk_pct_col),
+    ], w_right_inner, C_BORDER));
+
+    right_box_lines.push(box_row(vec![
+        span(format!("    {}", reset_wk_str), C_MUTED),
+    ], w_right_inner, C_BORDER));
+
+    // Rows 9, 10, 11: Five Hour Usage
+    right_box_lines.push(box_row(vec![
+        span("  Five Hour Limit Remaining", if is_cur_pro { C_TEXT } else { C_MUTED }),
+    ], w_right_inner, C_BORDER));
 
     if is_cur_pro {
-        // Pro shows 5-hour AND weekly
-        let gauge_5h = make_gauge(q_5h, 14);
+        let gauge_5h = make_gauge(q_5h, gauge_bar_len);
+        let h5_pct_col = if q_5h >= 50.0 { C_ACT_COUNT } else if q_5h >= 20.0 { C_KEY } else { C_INA_COUNT };
         right_box_lines.push(box_row(vec![
-            span("  5-HOUR USAGE: ", C_TITLE),
-            span(gauge_5h, if q_5h >= 50 { C_ACT_COUNT } else if q_5h >= 20 { C_KEY } else { C_INA_COUNT }),
-            span(format!(" {:>3}%", q_5h), C_TEXT),
-            span(format!("  · Resets {}", reset_5h_str), C_MUTED),
+            span("    ", Color::Reset),
+            span(gauge_5h, h5_pct_col),
+            span(format!(" {:>6.2}%", q_5h), h5_pct_col),
         ], w_right_inner, C_BORDER));
 
-        let gauge_wk = make_gauge(q_wk, 14);
         right_box_lines.push(box_row(vec![
-            span("  WEEKLY USAGE: ", C_TITLE),
-            span(gauge_wk, if q_wk >= 50 { C_ACT_COUNT } else if q_wk >= 20 { C_KEY } else { C_INA_COUNT }),
-            span(format!(" {:>3}%", q_wk), C_TEXT),
-            span(format!("  · Resets {}", reset_wk_str), C_MUTED),
+            span(format!("    {}", reset_5h_str), C_MUTED),
         ], w_right_inner, C_BORDER));
     } else {
-        // Free shows ONLY weekly
-        let gauge_wk = make_gauge(q_wk, 14);
         right_box_lines.push(box_row(vec![
-            span("  WEEKLY USAGE: ", C_TITLE),
-            span(gauge_wk, if q_wk >= 50 { C_ACT_COUNT } else if q_wk >= 20 { C_KEY } else { C_INA_COUNT }),
-            span(format!(" {:>3}%", q_wk), C_TEXT),
-            span(format!("  · Resets {}", reset_wk_str), C_MUTED),
+            span("    N/A  (Standard Free tier has weekly quota only)", C_DARK),
         ], w_right_inner, C_BORDER));
 
         right_box_lines.push(box_row(vec![
-            span("  5-HOUR USAGE: ", C_MUTED),
-            span("N/A  (Free tier has weekly quota only)", C_DARK),
+            span("    Refreshes on weekly cycle", C_MUTED),
         ], w_right_inner, C_BORDER));
     }
 
-    // Row 7: Quota Note
-    let quota_note = if is_cur_pro {
-        format!("  Active high-priority bucket · {}% weekly pool remaining", q_wk)
-    } else {
-        "  Standard free tier · Weekly resets active".to_string()
-    };
-    right_box_lines.push(box_row(vec![
-        span(trunc_str(&quota_note, 58), C_MUTED),
-    ], w_right_inner, C_BORDER));
-
-    // Row 8: Command Center Divider
+    // Row 12: Command Center Divider
     right_box_lines.push(vec![
         span("├", C_BORDER),
         span("─".repeat(w_right_inner), C_BORDER),
         span("┤", C_BORDER),
     ]);
 
-    // Rows 9, 10, 11: Commands
+    // Rows 13, 14, 15: Commands
     right_box_lines.push(box_row(vec![
         span("  ", C_TEXT),
         span(format!("[1-{}]", total_count), C_KEY),
@@ -923,7 +959,7 @@ fn build_horizontal_lines(
         span(" Quit Switcher", C_TEXT),
     ], w_right_inner, C_BORDER));
 
-    // Row 12: Prompt line
+    // Row 16: Prompt line
     let prompt_display = match state {
         InputState::Normal => if input_buf.is_empty() { "_".to_string() } else { format!("{input_buf}_") },
         InputState::PromptImport => format!("{input_buf}_"),
@@ -934,22 +970,29 @@ fn build_horizontal_lines(
         span(trunc_str(&prompt_display, 54), C_TEXT),
     ], w_right_inner, C_BORDER));
 
-    // Row 13: Status message
+    // Row 17: Status message
     right_box_lines.push(box_row(vec![
         span("  ", C_TEXT),
         span(trunc_str(status_msg, 56), C_TITLE),
     ], w_right_inner, C_BORDER));
 
-    // Pad right box lines if left box has more lines (so both boxes have identical row count)
-    while right_box_lines.len() < left_box_lines.len() - 1 {
-        right_box_lines.push(vec![
-            span("│", C_BORDER),
-            span(" ".repeat(w_right_inner), Color::Reset),
-            span("│", C_BORDER),
-        ]);
+    // Equalize left and right boxes so bottom borders align
+    while right_box_lines.len() < left_box_lines.len() {
+        right_box_lines.push(box_row(vec![
+            span(" ", Color::Reset),
+        ], w_right_inner, C_BORDER));
+    }
+    while left_box_lines.len() < right_box_lines.len() {
+        left_box_lines.push(box_row(vec![
+            span(" ", Color::Reset),
+        ], w_left_inner, C_BORDER));
     }
 
-    // Row 14: Footer
+    left_box_lines.push(vec![
+        span("╰", C_BORDER),
+        span("─".repeat(w_left_inner), C_BORDER),
+        span("╯", C_BORDER),
+    ]);
     right_box_lines.push(vec![
         span("╰", C_BORDER),
         span("─".repeat(w_right_inner), C_BORDER),
@@ -1094,11 +1137,15 @@ fn build_compact_lines(
 
         let is_pro = matches!(acc.plan.as_deref(), Some("Pro") | Some("Google AI Plus") | Some("Ultra"));
         let h5_str = if is_pro {
-            acc.quota_5h.map(|p| format!("{:>3}%", p)).unwrap_or_else(|| " 100%".into())
+            acc.quota_5h.map(|p| {
+                if p >= 99.95 { " 100%".into() } else { format!("{:>4.1}%", p) }
+            }).unwrap_or_else(|| " 100%".into())
         } else {
             "  -- ".into()
         };
-        let wk_str = acc.quota_weekly.map(|p| format!("{:>3}%", p)).unwrap_or_else(|| "100%".into());
+        let wk_str = acc.quota_weekly.map(|p| {
+            if p >= 99.95 { "100%".into() } else { format!("{:>3.0}%", p) }
+        }).unwrap_or_else(|| "100%".into());
 
         let row_bg = if is_selected { C_SEL_BG } else { Color::Reset };
         let text_col = C_TEXT;
@@ -1166,31 +1213,53 @@ fn build_compact_lines(
         span("│", b_border),
     ]);
 
-    let q_5h = cur_acc.quota_5h.unwrap_or(100);
-    let q_wk = cur_acc.quota_weekly.unwrap_or(if is_cur_pro { 48 } else { 100 });
+    let q_5h = cur_acc.quota_5h.unwrap_or(100.0);
+    let q_wk = cur_acc.quota_weekly.unwrap_or(100.0);
+    let reset_5h_str = cur_acc.quota_reset_5h.as_deref()
+        .map(format_relative_countdown)
+        .unwrap_or_else(|| "Refreshes in 5h 00m".into());
+    let reset_wk_str = cur_acc.quota_reset_weekly.as_deref()
+        .map(format_relative_countdown)
+        .unwrap_or_else(|| "Refreshes in 165h 00m".into());
+
+    let models_desc = cur_acc.quota_group_desc.as_deref().unwrap_or(if is_cur_pro {
+        "Models within this group: Gemini Flash, Gemini Pro"
+    } else {
+        "Models within this group: Gemini Flash"
+    });
+
+    lines.push(box_row(vec![
+        span("  GEMINI: ", C_TITLE),
+        span(trunc_str(models_desc, 58), C_MUTED),
+    ], 71, b_border));
 
     if is_cur_pro {
-        lines.push(vec![
-            span(pad, Color::Reset),
-            span("│", b_border),
-            span("  5-HOUR: ", C_TITLE),
-            span(format!("{:>3}%", q_5h), C_ACT_COUNT),
-            span("  ·  WEEKLY: ", C_TITLE),
-            span(format!("{:>3}%", q_wk), C_ACT_COUNT),
-            span("  ·  TIER: ", C_TITLE),
-            span(format!("{:<27}", cur_acc.plan.as_deref().unwrap_or("Pro")), C_TEXT),
-            span("│", b_border),
-        ]);
-    } else {
-        lines.push(vec![
-            span(pad, Color::Reset),
-            span("│", b_border),
+        let gauge_wk = make_gauge(q_wk, 16);
+        let gauge_5h = make_gauge(q_5h, 16);
+        lines.push(box_row(vec![
             span("  WEEKLY: ", C_TITLE),
-            span(format!("{:>3}%", q_wk), C_ACT_COUNT),
-            span("  ·  5-HOUR: ", C_MUTED),
-            span("N/A (Free Tier has weekly quota only)      ", C_DARK),
-            span("│", b_border),
-        ]);
+            span(gauge_wk, if q_wk >= 50.0 { C_ACT_COUNT } else if q_wk >= 20.0 { C_KEY } else { C_INA_COUNT }),
+            span(format!(" {:>6.2}%", q_wk), C_TEXT),
+            span(format!(" · {}", reset_wk_str), C_MUTED),
+        ], 71, b_border));
+        lines.push(box_row(vec![
+            span("  5-HOUR: ", C_TITLE),
+            span(gauge_5h, if q_5h >= 50.0 { C_ACT_COUNT } else if q_5h >= 20.0 { C_KEY } else { C_INA_COUNT }),
+            span(format!(" {:>6.2}%", q_5h), C_TEXT),
+            span(format!(" · {}", reset_5h_str), C_MUTED),
+        ], 71, b_border));
+    } else {
+        let gauge_wk = make_gauge(q_wk, 16);
+        lines.push(box_row(vec![
+            span("  WEEKLY: ", C_TITLE),
+            span(gauge_wk, if q_wk >= 50.0 { C_ACT_COUNT } else if q_wk >= 20.0 { C_KEY } else { C_INA_COUNT }),
+            span(format!(" {:>6.2}%", q_wk), C_TEXT),
+            span(format!(" · {}", reset_wk_str), C_MUTED),
+        ], 71, b_border));
+        lines.push(box_row(vec![
+            span("  5-HOUR: ", C_MUTED),
+            span("N/A (Free Tier has weekly quota only)", C_DARK),
+        ], 71, b_border));
     }
     lines.push(vec![
         span(pad, Color::Reset),

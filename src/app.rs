@@ -50,7 +50,11 @@ fn print_accounts(reg:&Registry,accounts:&[Account],usage:&[(String,Result<quota
     for (i,a) in accounts.iter().enumerate() {
         let u=usage.iter().find(|(id,_)|id==&a.id);
         let (plan,five,week)=match u {
-            Some((_,Ok(u)))=>(u.plan.clone(),u.five_hour.as_ref().map(|b|format!("{}%",b.remaining_percent)).unwrap_or_else(||"-".into()),u.weekly.as_ref().map(|b|format!("{}%",b.remaining_percent)).unwrap_or_else(||"-".into())),
+            Some((_,Ok(u)))=>(
+                u.plan.clone(),
+                u.five_hour.as_ref().map(|b|if (b.remaining_percent - 100.0).abs() < 0.05 { "100%".into() } else { format!("{:.1}%",b.remaining_percent) }).unwrap_or_else(||"-".into()),
+                u.weekly.as_ref().map(|b|if (b.remaining_percent - 100.0).abs() < 0.05 { "100%".into() } else { format!("{:.1}%",b.remaining_percent) }).unwrap_or_else(||"-".into()),
+            ),
             Some((_,Err(_)))=>("?".into(),"?".into(),"?".into()),
             None=>(a.plan.clone().unwrap_or_else(||"-".into()),"-".into(),"-".into()),
         };
@@ -176,6 +180,7 @@ pub fn run()->Result<()> {
                             a.quota_weekly = u.weekly.as_ref().map(|b| b.remaining_percent);
                             a.quota_reset_5h = u.five_hour.as_ref().and_then(|b| b.reset_time.clone());
                             a.quota_reset_weekly = u.weekly.as_ref().and_then(|b| b.reset_time.clone());
+                            a.quota_group_desc = u.gemini_group().map(|g| g.description.clone());
                             changed = true;
                         }
                     }
@@ -235,7 +240,7 @@ pub fn run()->Result<()> {
                 let active=active.ok_or_else(||anyhow!("could not verify active-account quota; refusing automatic rotation"))?;
                 if !active.exhausted(){return output(json!({"switched":false,"active":r.active,"reason":"quota_available"}),||println!("Current account still has quota. No rotation needed."),json_flag);}
             }
-            let best=results.iter().filter(|(id,_)|id!=&r.active).filter_map(|(id,u)|u.as_ref().ok().and_then(|u|{let remaining=u.min_remaining().unwrap_or(0);(remaining>0&&!u.exhausted()).then_some((id.clone(),remaining))})).max_by_key(|(_,v)|*v);
+            let best=results.iter().filter(|(id,_)|id!=&r.active).filter_map(|(id,u)|u.as_ref().ok().and_then(|u|{let remaining=u.min_remaining().unwrap_or(0.0);(remaining>0.0&&!u.exhausted()).then_some((id.clone(),(remaining*100.0) as i64))})).max_by_key(|(_,v)|*v);
             let Some((id,_))=best else{bail!("no verified healthy alternative account; rotation canceled");};
             let warnings=activate(&store,&mut r,&id,target,close_desktop,relaunch)?;
             output(json!({"switched":true,"active":id,"warnings":warnings}),||println!("Rotated to {id}."),json_flag)?;
@@ -324,6 +329,7 @@ pub fn run()->Result<()> {
                     a.quota_weekly = u.weekly.as_ref().map(|b| b.remaining_percent);
                     a.quota_reset_5h = u.five_hour.as_ref().and_then(|b| b.reset_time.clone());
                     a.quota_reset_weekly = u.weekly.as_ref().and_then(|b| b.reset_time.clone());
+                    a.quota_group_desc = u.gemini_group().map(|g| g.description.clone());
                 }
             }
             r.normalize()?;
@@ -340,7 +346,15 @@ fn print_usage(u:&quota::Usage){
     println!("{} | {} | {}",u.account,u.plan,u.updated_at);
     for g in &u.groups {
         println!("  {}",g.name);
-        for b in &g.buckets {println!("    {:<12} {:>3}%  {}",b.window,b.remaining_percent,b.reset_time.as_deref().unwrap_or(""));}
+        if !g.description.is_empty() {
+            println!("    {}", g.description);
+        }
+        for b in &g.buckets {
+            let reset_str = b.reset_time.as_deref().map(|rt| {
+                format!("{} ({})", tui::format_relative_countdown(rt), rt)
+            }).unwrap_or_default();
+            println!("    {:<12} {:>6.2}%  {}", b.window, b.remaining_percent, reset_str);
+        }
     }
 }
 

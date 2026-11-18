@@ -7,14 +7,31 @@ use crate::{model::{Account,Credential},oauth,store::Store};
 
 const API:&str="https://cloudcode-pa.googleapis.com/v1internal";
 #[derive(Clone,Debug,Serialize,Deserialize)]
-pub struct Bucket {pub id:String,pub name:String,pub window:String,pub remaining_percent:u8,pub reset_time:Option<String>}
+pub struct Bucket {pub id:String,pub name:String,pub window:String,pub remaining_percent:f64,pub reset_time:Option<String>}
 #[derive(Clone,Debug,Serialize,Deserialize)]
 pub struct Group {pub name:String,pub description:String,pub buckets:Vec<Bucket>}
 #[derive(Clone,Debug,Serialize,Deserialize)]
 pub struct Usage {pub account:String,pub plan:String,pub five_hour:Option<Bucket>,pub weekly:Option<Bucket>,pub groups:Vec<Group>,pub updated_at:DateTime<Utc>}
 impl Usage {
-    pub fn min_remaining(&self)->Option<u8>{self.five_hour.as_ref().map(|b|b.remaining_percent).into_iter().chain(self.weekly.as_ref().map(|b|b.remaining_percent)).min()}
-    pub fn exhausted(&self)->bool{self.groups.iter().flat_map(|g|&g.buckets).any(|b|b.remaining_percent==0)}
+    pub fn min_remaining(&self)->Option<f64>{
+        self.five_hour.as_ref().map(|b|b.remaining_percent)
+            .into_iter()
+            .chain(self.weekly.as_ref().map(|b|b.remaining_percent))
+            .min_by(|a,b|a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+    }
+    pub fn exhausted(&self)->bool{self.groups.iter().flat_map(|g|&g.buckets).any(|b|b.remaining_percent<=0.0)}
+    pub fn gemini_group(&self)->Option<&Group>{
+        self.groups.iter().find(|g|{
+            let n=g.name.to_ascii_lowercase();
+            n.contains("gemini")
+        }).or_else(||self.groups.first())
+    }
+    pub fn third_party_group(&self)->Option<&Group>{
+        self.groups.iter().find(|g|{
+            let n=g.name.to_ascii_lowercase();
+            n.contains("claude")||n.contains("gpt")||n.contains("3p")
+        })
+    }
 }
 fn project(credential:&Credential)->String{
     if !credential.field("project_id").is_empty(){return credential.field("project_id").into();}
@@ -53,7 +70,7 @@ fn lower(target:&mut Option<Bucket>,candidate:&Bucket){
     let replace=match target{
         None=>true,
         Some(current)=>candidate.remaining_percent<current.remaining_percent ||
-            (candidate.remaining_percent==current.remaining_percent && candidate.reset_time.is_some() && (current.reset_time.is_none()||candidate.reset_time<current.reset_time))
+            ((candidate.remaining_percent - current.remaining_percent).abs() < f64::EPSILON && candidate.reset_time.is_some() && (current.reset_time.is_none()||candidate.reset_time<current.reset_time))
     };
     if replace{*target=Some(candidate.clone());}
 }
@@ -73,11 +90,27 @@ pub fn fetch(c:&Credential)->Result<Usage>{
                     if !f.is_finite(){continue;}
                     let id=b["bucketId"].as_str().unwrap_or("").to_owned();
                     let window=b["window"].as_str().unwrap_or("").to_owned();
-                    let bucket=Bucket{id:id.clone(),name:b["displayName"].as_str().unwrap_or("").into(),window:window.clone(),remaining_percent:(f.clamp(0.,1.)*100.).round() as u8,reset_time:b["resetTime"].as_str().map(ToOwned::to_owned)};
-                    match bucket_window(&window,&id){Some("5h")=>lower(&mut usage.five_hour,&bucket),Some("weekly")=>lower(&mut usage.weekly,&bucket),_=>()}
+                    let pct=(f.clamp(0.0,1.0)*10000.0).round()/100.0;
+                    let bucket=Bucket{id:id.clone(),name:b["displayName"].as_str().unwrap_or("").into(),window:window.clone(),remaining_percent:pct,reset_time:b["resetTime"].as_str().map(ToOwned::to_owned)};
                     group.buckets.push(bucket);
                 }}
                 usage.groups.push(group);
+            }
+
+            // Prioritize the Gemini Models group for primary quota display
+            let gemini_grp=usage.groups.iter().find(|g|{
+                let n=g.name.to_ascii_lowercase();
+                n.contains("gemini")
+            }).or_else(||usage.groups.first());
+
+            if let Some(grp)=gemini_grp {
+                for b in &grp.buckets {
+                    match bucket_window(&b.window,&b.id){
+                        Some("5h")=>lower(&mut usage.five_hour,b),
+                        Some("weekly")=>lower(&mut usage.weekly,b),
+                        _=>()
+                    }
+                }
             }
         }
     }
@@ -107,5 +140,5 @@ pub fn fetch_all(store:&Store,accounts:&[Account])->Vec<(String,Result<Usage,Str
 
 #[cfg(test)]mod tests{
     use super::*;
-    #[test]fn choose_lowest(){let b=|n|Bucket{id:"5h".into(),name:"".into(),window:"5h".into(),remaining_percent:n,reset_time:None};let mut a=None;lower(&mut a,&b(50));lower(&mut a,&b(75));lower(&mut a,&b(1));assert_eq!(a.unwrap().remaining_percent,1);}
+    #[test]fn choose_lowest(){let b=|n:f64|Bucket{id:"5h".into(),name:"".into(),window:"5h".into(),remaining_percent:n,reset_time:None};let mut a=None;lower(&mut a,&b(50.0));lower(&mut a,&b(75.0));lower(&mut a,&b(1.5));assert_eq!(a.unwrap().remaining_percent,1.5);}
 }
