@@ -36,6 +36,7 @@ enum CommandLine {
     Path,
     Clean {#[arg(long)]dry_run:bool},
     Version {#[arg(long)]check:bool},
+    Sort,
 }
 #[derive(Subcommand,Debug)]enum AliasCmd {Set {query:String,alias:String},Clear {query:String},List}
 #[derive(Subcommand,Debug)]enum ConfigCmd {Live {#[arg(long)]interval:Option<u64>}}
@@ -51,7 +52,7 @@ fn print_accounts(reg:&Registry,accounts:&[Account],usage:&[(String,Result<quota
         let (plan,five,week)=match u {
             Some((_,Ok(u)))=>(u.plan.clone(),u.five_hour.as_ref().map(|b|format!("{}%",b.remaining_percent)).unwrap_or_else(||"-".into()),u.weekly.as_ref().map(|b|format!("{}%",b.remaining_percent)).unwrap_or_else(||"-".into())),
             Some((_,Err(_)))=>("?".into(),"?".into(),"?".into()),
-            None=>("-".into(),"-".into(),"-".into()),
+            None=>(a.plan.clone().unwrap_or_else(||"-".into()),"-".into(),"-".into()),
         };
         let active=if a.id==reg.active{"*"}else{" "};
         let display=a.display();let mut chars=display.chars();let short:String=chars.by_ref().take(44).collect();
@@ -162,6 +163,22 @@ pub fn run()->Result<()> {
                 print_accounts(&r,&accounts,&usage);
                 if all{for (_,v) in &usage{if let Ok(u)=v {print_usage(u);}}}
             },json_flag)?;
+            if !no_usage && !usage.is_empty() {
+                if let Ok(mut r_mut) = store.load() {
+                    let mut changed = false;
+                    for a in &mut r_mut.accounts {
+                        if let Some((_, Ok(u))) = usage.iter().find(|(uid, _)| uid == &a.id) {
+                            if !u.plan.is_empty() && a.plan.as_deref() != Some(&u.plan) {
+                                a.plan = Some(u.plan.clone());
+                                changed = true;
+                            }
+                        }
+                    }
+                    if changed {
+                        let _ = store.save(&r_mut);
+                    }
+                }
+            }
         }
         CommandLine::Add{alias,target,gcp}=>{
             let _lock=store.mutation_guard()?;let mut r=store.load()?;
@@ -285,6 +302,24 @@ pub fn run()->Result<()> {
                 let val=r.config.live_interval_seconds.unwrap_or(60);
                 output(json!({"live_interval_seconds":val}),||println!("Live refresh interval: {val}s"),json_flag)?;
             }}
+        }
+        CommandLine::Sort=>{
+            let _lock=store.mutation_guard()?;
+            let mut r=store.load()?;
+            let usage=quota::fetch_all(&store,&r.accounts);
+            for a in &mut r.accounts {
+                if let Some((_, Ok(u))) = usage.iter().find(|(uid, _)| uid == &a.id) {
+                    if !u.plan.is_empty() {
+                        a.plan = Some(u.plan.clone());
+                    }
+                }
+            }
+            r.normalize()?;
+            store.save(&r)?;
+            output(json!({"accounts":r.accounts,"active":r.active}),||{
+                println!("Resorted accounts (premium accounts at the top):\n");
+                print_accounts(&r,&r.accounts,&usage);
+            },json_flag)?;
         }
     }
     Ok(())

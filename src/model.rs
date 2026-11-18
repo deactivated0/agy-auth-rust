@@ -31,9 +31,11 @@ pub struct Account {
     pub added_at: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_used_at: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan: Option<String>,
 }
 impl Default for Account {
-    fn default()->Self {Self{id:String::new(),email:String::new(),subject:String::new(),alias:String::new(),auth_method:String::new(),project_id:String::new(),region:String::new(),fingerprint:String::new(),has_cli:false,has_desktop:false,added_at:Utc::now(),last_used_at:None}}
+    fn default()->Self {Self{id:String::new(),email:String::new(),subject:String::new(),alias:String::new(),auth_method:String::new(),project_id:String::new(),region:String::new(),fingerprint:String::new(),has_cli:false,has_desktop:false,added_at:Utc::now(),last_used_at:None,plan:None}}
 }
 impl Account {
     pub fn display(&self) -> String {
@@ -68,6 +70,19 @@ pub struct Registry {
 impl Default for Registry {
     fn default() -> Self { Self { version: 2, active: String::new(), previous: String::new(), config: Config { live_interval_seconds: None, snapshot_encryption: "aes-gcm-v1".into() }, accounts: vec![] } }
 }
+pub fn plan_rank(plan: Option<&str>) -> u8 {
+    match plan.unwrap_or("").to_lowercase().as_str() {
+        p if p.contains("ultra") => 0,
+        p if p.contains("pro") => 1,
+        p if p.contains("plus") || p.contains("premium") => 2,
+        p if p.contains("standard") => 3,
+        p if p.contains("paygo") => 4,
+        p if p.contains("free") => 10,
+        "" => 15,
+        _ => 12,
+    }
+}
+
 impl Registry {
     pub fn normalize(&mut self) -> Result<()> {
         if self.version > 2 { bail!("registry v{} is newer than supported v2", self.version); }
@@ -84,6 +99,7 @@ impl Registry {
         if !ids.contains(&self.previous) || self.active == self.previous { self.previous.clear(); }
         self.accounts.sort_by(|a,b| {
             (a.id != self.active).cmp(&(b.id != self.active))
+                .then_with(|| plan_rank(a.plan.as_deref()).cmp(&plan_rank(b.plan.as_deref())))
                 .then_with(|| a.email.is_empty().cmp(&b.email.is_empty()))
                 .then_with(|| a.email.to_ascii_lowercase().cmp(&b.email.to_ascii_lowercase()))
                 .then_with(|| a.alias.to_ascii_lowercase().cmp(&b.alias.to_ascii_lowercase()))
@@ -174,7 +190,7 @@ impl Credential {
         Ok(self)
     }
     pub fn account(&self, alias: &str) -> Account {
-        Account { id: self.id(), email: self.email.clone(), subject: self.subject.clone(), alias: alias.into(), auth_method: self.auth_method().into(), project_id: self.field("project_id").into(), region: self.field("region").into(), fingerprint: self.fingerprint.clone(), has_cli: true, has_desktop: false, added_at: Utc::now(), last_used_at: None }
+        Account { id: self.id(), email: self.email.clone(), subject: self.subject.clone(), alias: alias.into(), auth_method: self.auth_method().into(), project_id: self.field("project_id").into(), region: self.field("region").into(), fingerprint: self.fingerprint.clone(), has_cli: true, has_desktop: false, added_at: Utc::now(), last_used_at: None, plan: None }
     }
 }
 
