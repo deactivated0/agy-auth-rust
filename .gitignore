@@ -1,0 +1,29 @@
+# Build outputs
+/target/
+*.swp
+.DS_Store
+
+# Local authentication data. NEVER COMMIT REAL CREDENTIALS.
+.env
+.env.*
+!.env.example
+**/credentials.json
+**/antigravity-oauth-token
+**/encryption.key
+**/*.private.json
+**/*.secret.json
+**/*.pem
+**/*.p12
+**/*.pfx
+**/Cookies
+**/Cookies-journal
+**/app_storage.json
+**/.updaterId
+/accounts/
+/desktop/
+/backups/
+/registry.json
+/encryption.key
+*.sqlite
+*.sqlite3
+*.db
